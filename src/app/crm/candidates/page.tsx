@@ -8,19 +8,14 @@ export default async function CrmCandidatesPage() {
   const supabase = await createClient()
 
   const [
-    { data: candidates },
-    { count: totalCandidatesCount },
-    { count: activelyLookingCandidatesCount },
+    { data: candidates, count: totalCandidatesCount, error: candidatesError },
+    { count: activelyLookingCandidatesCount, error: activeCountError },
   ] = await Promise.all([
     supabase
       .from('candidates')
-      .select('*, applications(id, status)')
+      .select('*, applications(id, status)', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(0, 999),
-
-    supabase
-      .from('candidates')
-      .select('id', { count: 'exact', head: true }),
 
     supabase
       .from('candidates')
@@ -28,11 +23,22 @@ export default async function CrmCandidatesPage() {
       .or('actively_looking.eq.true,status.eq.active'),
   ])
 
+  if (candidatesError) {
+    console.error('Candidates page load error:', candidatesError)
+  }
+
+  if (activeCountError) {
+    console.error('Active candidates count error:', activeCountError)
+  }
+
   return (
     <CandidatesList
       initialCandidates={candidates ?? []}
-      totalCandidatesCount={totalCandidatesCount ?? 0}
-      activelyLookingCandidatesCount={activelyLookingCandidatesCount ?? 0}
+      totalCandidatesCount={totalCandidatesCount ?? candidates?.length ?? 0}
+      activelyLookingCandidatesCount={
+        activelyLookingCandidatesCount ??
+        (candidates ?? []).filter(candidate => candidate.actively_looking).length
+      }
     />
   )
 }
