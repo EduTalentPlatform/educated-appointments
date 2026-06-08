@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import LiveCandidateCount from '@/components/LiveCandidateCount'
 
 const values = [
   {
@@ -75,9 +76,11 @@ export default function AboutPage() {
               </div>
               <div className="ab-hero-card-stats">
                 <div className="ab-hero-stat">
-                  <span className="ab-hero-stat-num">500+</span>
-                  <span className="ab-hero-stat-label">Placements</span>
-                </div>
+  <span className="ab-hero-stat-num">
+    <LiveCandidateCount />
+  </span>
+  <span className="ab-hero-stat-label">Candidates</span>
+</div>
                 <div className="ab-hero-stat-divider" />
                 <div className="ab-hero-stat">
                   <span className="ab-hero-stat-num">7+</span>
@@ -185,10 +188,10 @@ export default function AboutPage() {
             </p>
             <div className="ab-difference-stats">
               {[
-                { num: '500+', label: 'Successful placements across FE & Skills' },
-                { num: '7+', label: 'Years working exclusively in FE & Skills' },
-                { num: '40+', label: 'Five-star reviews from candidates and employers' },
-              ].map((s) => (
+  { num: <LiveCandidateCount />, label: 'Candidates registered across FE & Skills' },
+  { num: '7+', label: 'Years working exclusively in FE & Skills' },
+  { num: '40+', label: 'Five-star reviews from candidates and employers' },
+].map((s) => (
                 <div key={s.label} className="ab-difference-stat">
                   <span className="ab-difference-stat-num">{s.num}</span>
                   <span className="ab-difference-stat-label">{s.label}</span>
