@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import LiveCandidateCount from '@/components/LiveCandidateCount'
 
 const steps = [
   {
@@ -68,18 +69,30 @@ export default function Process() {
 
           <div className="process-stat-card">
             {[
-  { num: '500+', label: 'Successful placements' },
-  { num: '100%', label: 'Compliance info gathered pre-shortlist' },
-  { num: '40+', label: 'Five-star reviews' },
-].map((stat, i) => (
-  <Fragment key={stat.num}>
-    {i > 0 && <div className="psc-divider" />}
-    <div className="psc-item">
-      <span className="psc-num">{stat.num}</span>
-      <span className="psc-label">{stat.label}</span>
-    </div>
-  </Fragment>
-))}
+              {
+                id: 'candidates',
+                num: <LiveCandidateCount />,
+                label: 'Candidates',
+              },
+              {
+                id: 'compliance',
+                num: '100%',
+                label: 'Compliance info gathered pre-shortlist',
+              },
+              {
+                id: 'reviews',
+                num: '40+',
+                label: 'Five-star reviews',
+              },
+            ].map((stat, i) => (
+              <Fragment key={stat.id}>
+                {i > 0 && <div className="psc-divider" />}
+                <div className="psc-item">
+                  <span className="psc-num">{stat.num}</span>
+                  <span className="psc-label">{stat.label}</span>
+                </div>
+              </Fragment>
+            ))}
           </div>
         </div>
 

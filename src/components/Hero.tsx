@@ -131,7 +131,7 @@ export default async function Hero() {
                   <LiveCandidateCount />
                 </span>
               </span>
-              <span className="label">Live & Passive Candidates</span>
+              <span className="label">Candidates</span>
             </div>
 
             <div className="trust-divider" />
