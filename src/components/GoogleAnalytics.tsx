@@ -8,9 +8,16 @@ const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 declare global {
   interface Window {
-    dataLayer?: any[]
+    dataLayer: unknown[]
     gtag?: (...args: any[]) => void
   }
+}
+
+function isExcludedPath(pathname: string) {
+  return (
+    pathname.startsWith('/crm') ||
+    pathname.startsWith('/employer-portal')
+  )
 }
 
 function GoogleAnalyticsPageView() {
@@ -18,13 +25,19 @@ function GoogleAnalyticsPageView() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (!GA_ID || typeof window.gtag !== 'function') return
+    if (!GA_ID) return
+    if (!pathname) return
+    if (typeof window.gtag !== 'function') return
+    if (isExcludedPath(pathname)) return
 
-    const query = searchParams.toString()
-    const pagePath = query ? `${pathname}?${query}` : pathname
+    const queryString = searchParams.toString()
+    const pagePath = queryString ? `${pathname}?${queryString}` : pathname
 
-    window.gtag('config', GA_ID, {
+    window.gtag('event', 'page_view', {
+      send_to: GA_ID,
       page_path: pagePath,
+      page_location: window.location.href,
+      page_title: document.title,
     })
   }, [pathname, searchParams])
 
@@ -41,15 +54,19 @@ export default function GoogleAnalytics() {
         strategy="afterInteractive"
       />
 
-      <Script id="google-analytics" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          window.gtag = gtag;
-          gtag('js', new Date());
-          gtag('config', '${GA_ID}', { send_page_view: false });
-        `}
-      </Script>
+      <Script
+        id="google-analytics"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', '${GA_ID}', { send_page_view: false });
+          `,
+        }}
+      />
 
       <Suspense fallback={null}>
         <GoogleAnalyticsPageView />
