@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import LiveCandidateCount from '@/components/LiveCandidateCount'
 
 type HeroJob = {
   id: string
@@ -127,10 +128,10 @@ export default async function Hero() {
             <div className="trust-stat">
               <span className="num">
                 <span className="count-up" data-target="500" data-suffix="+">
-                  500+
+                  <LiveCandidateCount />
                 </span>
               </span>
-              <span className="label">Placements</span>
+              <span className="label">Live & Passive Candidates</span>
             </div>
 
             <div className="trust-divider" />
