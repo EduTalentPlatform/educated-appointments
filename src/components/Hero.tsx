@@ -125,14 +125,12 @@ export default async function Hero() {
           </div>
 
           <div className="hero-trust">
-            <div className="trust-stat">
-              <span className="num">
-                <span className="count-up" data-target="500" data-suffix="+">
-                  <LiveCandidateCount />
-                </span>
-              </span>
-              <span className="label">Candidates</span>
-            </div>
+<div className="trust-stat">
+  <span className="num">
+    <LiveCandidateCount />
+  </span>
+  <span className="label">Candidates</span>
+</div>
 
             <div className="trust-divider" />
 
