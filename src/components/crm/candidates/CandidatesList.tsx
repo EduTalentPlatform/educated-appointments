@@ -93,9 +93,15 @@ const SORT_OPTIONS = [
 
 interface Props {
   initialCandidates: Candidate[]
+  totalCandidatesCount: number
+  activelyLookingCandidatesCount: number
 }
 
-export default function CandidatesList({ initialCandidates }: Props) {
+export default function CandidatesList({
+  initialCandidates,
+  totalCandidatesCount,
+  activelyLookingCandidatesCount,
+}: Props) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -607,9 +613,13 @@ const visibleStandardOptions = useMemo(() => {
         <div>
           <h1 className="crm-page-title">Candidates</h1>
           <p className="crm-page-sub">
-            {candidates.length} on file ·{' '}
-            {candidates.filter(c => c.actively_looking).length} actively looking
-          </p>
+  {Math.max(totalCandidatesCount, candidates.length).toLocaleString('en-GB')} on file ·{' '}
+  {Math.max(
+    activelyLookingCandidatesCount,
+    candidates.filter(c => c.actively_looking).length,
+  ).toLocaleString('en-GB')}{' '}
+  actively looking
+</p>
         </div>
 
         <button className="crm-btn-primary" onClick={() => setShowForm(true)}>
