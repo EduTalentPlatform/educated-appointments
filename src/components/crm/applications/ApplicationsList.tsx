@@ -128,7 +128,7 @@ export default function ApplicationsList({
 }: Props) {
   const router = useRouter()
 
-  const [applications] = useState(initialApplications)
+  const applications = initialApplications
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
   const [sortBy, setSortBy] = useState('last_updated')
@@ -360,9 +360,10 @@ export default function ApplicationsList({
     }
 
     if (data.application?.id) {
-      router.push(`/crm/applications/${data.application.id}`)
-      return
-    }
+  router.refresh()
+  router.push(`/crm/applications/${data.application.id}`)
+  return
+}
 
     setCreateError('Application created, but no application ID was returned.')
     setCreatingApplication(false)

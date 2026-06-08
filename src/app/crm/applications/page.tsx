@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import ApplicationsList from '@/components/crm/applications/ApplicationsList'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 function getServiceClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
