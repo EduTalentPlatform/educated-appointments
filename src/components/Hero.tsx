@@ -174,13 +174,6 @@ export default async function Hero() {
                     {job.title || 'Live vacancy'}
                   </span>
 
-                  <span
-                    className={`job-badge ${
-                      index === 1 ? 'badge-hot' : 'badge-new'
-                    }`}
-                  >
-                    {index === 1 ? 'Hot' : 'New'}
-                  </span>
                 </div>
 
                 <div className="job-meta">

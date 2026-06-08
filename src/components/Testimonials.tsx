@@ -166,7 +166,7 @@ export default async function Testimonials() {
           className="reveal"
         >
           <Link
-            href="/insights/testimonials"
+            href="/testimonials"
             className="btn-view-all"
             style={{ display: 'inline-block' }}
           >

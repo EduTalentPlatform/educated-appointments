@@ -11,7 +11,7 @@ const employerLinks = [
 const candidateLinks = [
   { label: 'Live Jobs', href: '/jobs' },
   { label: 'Register with Us', href: '/candidate' },
-  { label: 'Testimonials', href: '/insights/testimonials' },
+  { label: 'Testimonials', href: '/testimonials' },
 ]
 
 const companyLinks = [
