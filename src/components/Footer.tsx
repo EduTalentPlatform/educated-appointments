@@ -4,7 +4,7 @@ import Link from 'next/link'
 const employerLinks = [
   { label: 'How It Works', href: '/employer' },
   { label: 'Send a Brief', href: '/contact' },
-  { label: 'Employer Portal', href: '/portal' },
+  { label: 'Employer Portal', href: '/employer-portal/login' },
   { label: 'Sector Insights', href: '/insights' },
 ]
 
@@ -18,7 +18,8 @@ const companyLinks = [
   { label: 'About Us', href: '/about' },
   { label: 'Insights', href: '/insights' },
   { label: 'Contact', href: '/contact' },
-  { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Policies', href: '/policies' },
+  { label: 'Data Protection & Privacy', href: '/policies/data-protection' },
 ]
 
 export default function Footer() {
@@ -26,19 +27,28 @@ export default function Footer() {
     <footer>
       <div className="footer-inner">
         <div className="footer-top">
-
           <div>
             <div className="footer-logo">
-              <Image src="/logo.svg" alt="Educated Appointments" width={28} height={29} className="logo-svg" style={{ filter: 'brightness(0) invert(1)' }} />
+              <Image
+                src="/logo.svg"
+                alt="Educated Appointments"
+                width={28}
+                height={29}
+                className="logo-svg"
+                style={{ filter: 'brightness(0) invert(1)' }}
+              />
+
               <div className="footer-logo-text">
                 Educated Appointments
                 <span>FE &amp; Skills Recruitment</span>
               </div>
             </div>
+
             <p className="footer-tagline">
-              Specialist recruitment for Further Education, Skills &amp; Apprenticeships.
-              Safer Recruitment focused. UK-wide.
+              Specialist recruitment for Further Education, Skills &amp;
+              Apprenticeships. Safer Recruitment focused. UK-wide.
             </p>
+
             <div className="footer-contact">
               <a href="mailto:info@educatedappointments.co.uk">
                 info@educatedappointments.co.uk
@@ -50,8 +60,10 @@ export default function Footer() {
           <div className="footer-col">
             <p className="footer-col-title">For Employers</p>
             <ul>
-              {employerLinks.map((l) => (
-                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
+              {employerLinks.map(link => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
               ))}
             </ul>
           </div>
@@ -59,8 +71,10 @@ export default function Footer() {
           <div className="footer-col">
             <p className="footer-col-title">For Candidates</p>
             <ul>
-              {candidateLinks.map((l) => (
-                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
+              {candidateLinks.map(link => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
               ))}
             </ul>
           </div>
@@ -68,22 +82,26 @@ export default function Footer() {
           <div className="footer-col">
             <p className="footer-col-title">Company</p>
             <ul>
-              {companyLinks.map((l) => (
-                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
+              {companyLinks.map(link => (
+                <li key={link.href}>
+                  <Link href={link.href}>{link.label}</Link>
+                </li>
               ))}
             </ul>
           </div>
-
         </div>
 
         <div className="footer-bottom">
           <p className="footer-copy">
-            © {new Date().getFullYear()} Educated Appointments Ltd. All rights reserved.
+            © {new Date().getFullYear()} Educated Appointments Ltd. All rights
+            reserved.
           </p>
+
           <span className="rec-badge">Safer Recruitment Focused</span>
+
           <div className="footer-legal">
-            <Link href="/privacy-policy">Privacy</Link>
-            <Link href="/cookie-policy">Cookies</Link>
+            <Link href="/policies/data-protection">Privacy</Link>
+            <Link href="/policies">Cookies</Link>
           </div>
         </div>
       </div>
