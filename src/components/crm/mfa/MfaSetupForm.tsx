@@ -106,8 +106,9 @@ export default function MfaSetupForm() {
       return
     }
 
-    router.push('/crm')
-    router.refresh()
+    await supabase.auth.refreshSession()
+
+    window.location.href = '/crm'
   }
 
   return (
