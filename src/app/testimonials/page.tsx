@@ -21,6 +21,28 @@ type WebsiteRecommendation = {
 const fallbackTestimonials: WebsiteRecommendation[] = [
   {
     id: 'fallback-1',
+    initials: 'DK',
+    first_name: 'Dan',
+    role: 'Training Provider',
+    body: "The team at Educated Appointments possess an exceptional ability to understand our organisation's unique requirements, swiftly identifying top-tier talent that aligns with our company culture and values.",
+    tag: 'employer',
+    featured: true,
+    display_order: 1,
+    created_at: '',
+  },
+  {
+    id: 'fallback-2',
+    initials: 'ZS',
+    first_name: 'Zoe',
+    role: 'College Director',
+    body: 'After scouring the sector nationally for a Senior MIS Officer for nearly six months with three other agencies, Joe found us the right candidate within weeks. Genuinely impressive sector knowledge.',
+    tag: 'employer',
+    featured: false,
+    display_order: 2,
+    created_at: '',
+  },
+  {
+    id: 'fallback-3',
     initials: 'LN',
     first_name: 'Lyn',
     role: 'Placed Candidate',
@@ -31,28 +53,6 @@ const fallbackTestimonials: WebsiteRecommendation[] = [
     created_at: '',
   },
   {
-    id: 'fallback-2',
-    initials: 'DK',
-    first_name: 'Dan',
-    role: 'Training Provider',
-    body: "The team at Educated Appointments possess an exceptional ability to understand our organisation's unique requirements, swiftly identifying top-tier talent that aligns with our company culture and values.",
-    tag: 'employer',
-    featured: false,
-    display_order: 2,
-    created_at: '',
-  },
-  {
-    id: 'fallback-3',
-    initials: 'ZS',
-    first_name: 'Zoe',
-    role: 'College Director',
-    body: 'After scouring the sector nationally for a Senior MIS Officer for nearly six months with three other agencies, Joe found us the right candidate within weeks. Genuinely impressive sector knowledge.',
-    tag: 'employer',
-    featured: false,
-    display_order: 3,
-    created_at: '',
-  },
-  {
     id: 'fallback-4',
     initials: 'DH',
     first_name: 'Diane',
@@ -60,7 +60,7 @@ const fallbackTestimonials: WebsiteRecommendation[] = [
     body: 'Joe went above and beyond every step of the way. Regular check-in calls, interview confidence prep, and he made sure I was fully informed at every stage. Would recommend without hesitation.',
     tag: 'candidate',
     featured: false,
-    display_order: 4,
+    display_order: 2,
     created_at: '',
   },
 ]
@@ -83,8 +83,185 @@ function getInitials(testimonial: WebsiteRecommendation) {
     .join('')
 }
 
-function getTagLabel(tag: WebsiteRecommendation['tag']) {
-  return tag.charAt(0).toUpperCase() + tag.slice(1)
+function TestimonialCard({
+  testimonial,
+}: {
+  testimonial: WebsiteRecommendation
+}) {
+  return (
+    <article
+      style={{
+        background: '#ffffff',
+        border: testimonial.featured
+          ? '1px solid rgba(88, 86, 214, 0.34)'
+          : '1px solid var(--border)',
+        borderRadius: 24,
+        padding: 26,
+        boxShadow: testimonial.featured
+          ? '0 18px 54px rgba(88, 86, 214, 0.16)'
+          : '0 14px 44px rgba(15, 23, 42, 0.07)',
+      }}
+    >
+      {testimonial.featured && (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderRadius: 999,
+            padding: '6px 10px',
+            background: 'var(--primary-light)',
+            color: 'var(--primary)',
+            fontSize: 11,
+            fontWeight: 950,
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+            marginBottom: 14,
+          }}
+        >
+          Featured
+        </span>
+      )}
+
+      <p
+        style={{
+          margin: 0,
+          color: 'var(--text-dark)',
+          fontSize: 16,
+          lineHeight: 1.75,
+          fontWeight: 650,
+        }}
+      >
+        “{testimonial.body}”
+      </p>
+
+      <div
+        style={{
+          marginTop: 24,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'var(--primary-light)',
+            display: 'grid',
+            placeItems: 'center',
+            color: 'var(--primary)',
+            fontWeight: 950,
+            fontSize: 13,
+            flex: '0 0 auto',
+          }}
+        >
+          {getInitials(testimonial)}
+        </div>
+
+        <div>
+          <p
+            style={{
+              margin: 0,
+              color: 'var(--text-dark)',
+              fontSize: 14,
+              fontWeight: 950,
+            }}
+          >
+            {testimonial.first_name}
+          </p>
+
+          <p
+            style={{
+              margin: 0,
+              marginTop: 2,
+              color: 'var(--text-muted)',
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {testimonial.role || 'Educated Appointments testimonial'}
+          </p>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function TestimonialColumn({
+  title,
+  subtitle,
+  testimonials,
+  emptyText,
+}: {
+  title: string
+  subtitle: string
+  testimonials: WebsiteRecommendation[]
+  emptyText: string
+}) {
+  return (
+    <section
+      style={{
+        background: 'rgba(255,255,255,0.62)',
+        border: '1px solid var(--border)',
+        borderRadius: 30,
+        padding: 24,
+        boxShadow: '0 18px 50px rgba(15, 23, 42, 0.06)',
+      }}
+    >
+      <div style={{ marginBottom: 20 }}>
+        <h2
+          style={{
+            margin: 0,
+            color: 'var(--text-dark)',
+            fontSize: 30,
+            letterSpacing: -0.8,
+            fontWeight: 950,
+          }}
+        >
+          {title}
+        </h2>
+
+        <p
+          style={{
+            margin: 0,
+            marginTop: 8,
+            color: 'var(--text-muted)',
+            fontSize: 14,
+            lineHeight: 1.65,
+            fontWeight: 650,
+          }}
+        >
+          {subtitle}
+        </p>
+      </div>
+
+      {testimonials.length > 0 ? (
+        <div style={{ display: 'grid', gap: 18 }}>
+          {testimonials.map(testimonial => (
+            <TestimonialCard
+              key={testimonial.id}
+              testimonial={testimonial}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px dashed var(--border)',
+            borderRadius: 20,
+            padding: 22,
+            color: 'var(--text-muted)',
+            lineHeight: 1.7,
+            fontWeight: 650,
+          }}
+        >
+          {emptyText}
+        </div>
+      )}
+    </section>
+  )
 }
 
 export default async function TestimonialsPage() {
@@ -105,8 +282,13 @@ export default async function TestimonialsPage() {
       ? (data as WebsiteRecommendation[])
       : fallbackTestimonials
 
-  const featured = testimonials.find(item => item.featured) ?? testimonials[0]
-  const rest = testimonials.filter(item => item.id !== featured?.id)
+  const employerTestimonials = testimonials.filter(
+    testimonial => testimonial.tag === 'employer',
+  )
+
+  const candidateTestimonials = testimonials.filter(
+    testimonial => testimonial.tag === 'candidate',
+  )
 
   return (
     <main style={{ background: '#f5f5f7', minHeight: '100vh' }}>
@@ -124,7 +306,7 @@ export default async function TestimonialsPage() {
             style={{
               margin: 0,
               marginTop: 10,
-              maxWidth: 780,
+              maxWidth: 820,
               color: 'var(--text-dark)',
               fontSize: 'clamp(42px, 6vw, 76px)',
               lineHeight: 0.96,
@@ -146,7 +328,7 @@ export default async function TestimonialsPage() {
               fontWeight: 600,
             }}
           >
-            Real feedback from training providers, colleges and FE & Skills
+            Feedback from training providers, colleges and FE & Skills
             professionals who have worked with Educated Appointments.
           </p>
 
@@ -170,188 +352,29 @@ export default async function TestimonialsPage() {
       </section>
 
       <section style={{ padding: '56px 32px 96px' }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-          {featured && (
-            <article
-              style={{
-                background: 'linear-gradient(135deg, var(--primary), #2f2ce8)',
-                color: '#ffffff',
-                borderRadius: 30,
-                padding: 36,
-                boxShadow: '0 24px 70px rgba(47, 44, 232, 0.28)',
-                marginBottom: 24,
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 64,
-                  lineHeight: 0.8,
-                  opacity: 0.28,
-                  fontWeight: 950,
-                }}
-              >
-                “
-              </p>
+        <div
+          style={{
+            maxWidth: 1120,
+            margin: '0 auto',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: 24,
+            alignItems: 'start',
+          }}
+        >
+          <TestimonialColumn
+            title="Employer testimonials"
+            subtitle="Feedback from training providers, colleges and hiring organisations."
+            testimonials={employerTestimonials}
+            emptyText="Employer testimonials will appear here once they are marked to show on the website."
+          />
 
-              <p
-                style={{
-                  margin: 0,
-                  marginTop: 4,
-                  fontSize: 24,
-                  lineHeight: 1.55,
-                  fontWeight: 750,
-                  maxWidth: 920,
-                }}
-              >
-                {featured.body}
-              </p>
-
-              <div
-                style={{
-                  marginTop: 28,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 16,
-                    background: 'rgba(255,255,255,0.18)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    color: '#ffffff',
-                    fontWeight: 950,
-                  }}
-                >
-                  {getInitials(featured)}
-                </div>
-
-                <div>
-                  <p style={{ margin: 0, fontSize: 15, fontWeight: 950 }}>
-                    {featured.first_name}
-                  </p>
-
-                  <p
-                    style={{
-                      margin: 0,
-                      marginTop: 3,
-                      color: 'rgba(255,255,255,0.72)',
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {featured.role || 'Educated Appointments testimonial'}
-                  </p>
-                </div>
-
-                <span
-                  className={`tc-tag ${featured.tag}`}
-                  style={{
-                    marginLeft: 'auto',
-                    background: 'rgba(255,255,255,0.15)',
-                    color: 'rgba(255,255,255,0.88)',
-                  }}
-                >
-                  {getTagLabel(featured.tag)}
-                </span>
-              </div>
-            </article>
-          )}
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: 20,
-            }}
-          >
-            {rest.map(testimonial => (
-              <article
-                key={testimonial.id}
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid var(--border)',
-                  borderRadius: 24,
-                  padding: 26,
-                  boxShadow: '0 14px 44px rgba(15, 23, 42, 0.07)',
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    color: 'var(--text-dark)',
-                    fontSize: 16,
-                    lineHeight: 1.7,
-                    fontWeight: 650,
-                  }}
-                >
-                  “{testimonial.body}”
-                </p>
-
-                <div
-                  style={{
-                    marginTop: 24,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 14,
-                      background: 'var(--primary-light)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      color: 'var(--primary)',
-                      fontWeight: 950,
-                      fontSize: 13,
-                    }}
-                  >
-                    {getInitials(testimonial)}
-                  </div>
-
-                  <div>
-                    <p
-                      style={{
-                        margin: 0,
-                        color: 'var(--text-dark)',
-                        fontSize: 14,
-                        fontWeight: 950,
-                      }}
-                    >
-                      {testimonial.first_name}
-                    </p>
-
-                    <p
-                      style={{
-                        margin: 0,
-                        marginTop: 2,
-                        color: 'var(--text-muted)',
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {testimonial.role || 'Educated Appointments testimonial'}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`tc-tag ${testimonial.tag}`}
-                    style={{ marginLeft: 'auto' }}
-                  >
-                    {getTagLabel(testimonial.tag)}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
+          <TestimonialColumn
+            title="Candidate testimonials"
+            subtitle="Feedback from candidates and FE & Skills professionals we have supported."
+            testimonials={candidateTestimonials}
+            emptyText="Candidate testimonials will appear here once they are marked to show on the website."
+          />
         </div>
       </section>
     </main>
