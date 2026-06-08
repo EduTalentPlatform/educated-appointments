@@ -3,9 +3,18 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const CRM_LOGIN_PATH = '/crm/login'
+const CRM_MFA_SETUP_PATH = '/crm/mfa/setup'
+const CRM_MFA_VERIFY_PATH = '/crm/mfa/verify'
 
 function isCrmLogin(pathname: string) {
   return pathname === CRM_LOGIN_PATH
+}
+
+function isCrmMfaPath(pathname: string) {
+  return (
+    pathname === CRM_MFA_SETUP_PATH ||
+    pathname === CRM_MFA_VERIFY_PATH
+  )
 }
 
 function isProtectedCrmPath(pathname: string) {
@@ -80,6 +89,40 @@ export async function middleware(request: NextRequest) {
     }
 
     return NextResponse.redirect(new URL(CRM_LOGIN_PATH, request.url))
+  }
+
+  const { data: aalData, error: aalError } =
+    await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+
+  if (aalError) {
+    if (isApiPath(pathname)) {
+      return NextResponse.json(
+        { error: 'Could not verify MFA status.' },
+        { status: 403 },
+      )
+    }
+
+    return NextResponse.redirect(new URL(CRM_MFA_VERIFY_PATH, request.url))
+  }
+
+  if (isCrmMfaPath(pathname)) {
+    return response
+  }
+
+  if (aalData?.currentLevel !== 'aal2') {
+    if (isApiPath(pathname)) {
+      return NextResponse.json(
+        { error: 'MFA verification required.' },
+        { status: 403 },
+      )
+    }
+
+    const nextPath =
+      aalData?.nextLevel === 'aal2'
+        ? CRM_MFA_VERIFY_PATH
+        : CRM_MFA_SETUP_PATH
+
+    return NextResponse.redirect(new URL(nextPath, request.url))
   }
 
   return response

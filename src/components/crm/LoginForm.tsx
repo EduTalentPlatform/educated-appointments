@@ -17,7 +17,11 @@ export default function LoginForm() {
     setError(null)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    })
 
     if (error) {
       setError('Invalid email or password.')
@@ -25,7 +29,22 @@ export default function LoginForm() {
       return
     }
 
-    router.push('/crm')
+    const { data: aalData } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+
+    if (aalData?.currentLevel === 'aal2') {
+      router.push('/crm')
+      router.refresh()
+      return
+    }
+
+    if (aalData?.nextLevel === 'aal2') {
+      router.push('/crm/mfa/verify')
+      router.refresh()
+      return
+    }
+
+    router.push('/crm/mfa/setup')
     router.refresh()
   }
 
