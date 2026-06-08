@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import LiveCandidateCount from '@/components/LiveCandidateCount'
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 function CheckIcon({ color = '#5DDBDB' }: { color?: string }) {
@@ -236,8 +237,10 @@ export default function EmployerPage() {
             </div>
             <div className="ep-hero-proof">
               <div className="ep-proof-item">
-                <span className="ep-proof-num">500+</span>
-                <span className="ep-proof-label">Placements made</span>
+                <span className="ep-proof-num">
+  <LiveCandidateCount />
+</span>
+                <span className="ep-proof-label">Candidates</span>
               </div>
               <div className="ep-proof-divider" />
               <div className="ep-proof-item">

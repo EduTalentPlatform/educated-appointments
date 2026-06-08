@@ -36,6 +36,11 @@ const nav = [
         label: 'Recommendations',
         icon: '★',
       },
+      {
+        href: '/crm/insights',
+        label: 'Insights',
+        icon: '✍',
+      },
     ],
   },
   {

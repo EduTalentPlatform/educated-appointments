@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import Link from 'next/link'
 import { REGIONS } from '@/lib/jobs-data'
+import LiveCandidateCount from '@/components/LiveCandidateCount'
 
 type ApprenticeshipStandard = {
   id: string
@@ -941,8 +942,10 @@ export default function CandidatePage({
           <div className="cp-hero-right">
             <div className="cp-hero-stats">
               <div className="cp-stat">
-                <span className="cp-stat-num">500+</span>
-                <span className="cp-stat-label">Candidates placed</span>
+                <span className="cp-stat-num">
+  <LiveCandidateCount />
+</span>
+                <span className="cp-stat-label">Candidates</span>
               </div>
 
               <div className="cp-stat">
