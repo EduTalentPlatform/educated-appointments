@@ -2,6 +2,8 @@ import 'server-only'
 
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
+import Nav from '@/components/Nav'
+import Footer from '@/components/Footer'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -291,7 +293,10 @@ export default async function TestimonialsPage() {
   )
 
   return (
-    <main style={{ background: '#f5f5f7', minHeight: '100vh' }}>
+    <>
+      <Nav />
+
+      <main style={{ background: '#f5f5f7', minHeight: '100vh' }}>
       <section
         style={{
           padding: '96px 32px 56px',
@@ -377,6 +382,9 @@ export default async function TestimonialsPage() {
           />
         </div>
       </section>
-    </main>
+      </main>
+
+      <Footer />
+    </>
   )
 }
