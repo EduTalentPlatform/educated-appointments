@@ -3100,7 +3100,16 @@ function DocumentsTab({
   openSelectedDocument,
 }: DocumentsTabProps) {
   const selectedFileUrl = selectedDocumentUrl || selectedDocSafe?.file_url || ''
-  const selectedFileKind = getFileKind(selectedFileUrl || null)
+
+const selectedFileKind =
+  getFileKind(selectedDocSafe?.name || null) !== 'unknown'
+    ? getFileKind(selectedDocSafe?.name || null)
+    : getFileKind(
+        selectedDocSafe?.storage_path ||
+          selectedDocSafe?.file_url ||
+          selectedFileUrl ||
+          null,
+      )
   const selectedIsFormattedCv = selectedDocSafe?.doc_type === 'formatted_cv'
   const selectedIsReleased = Boolean(selectedDocSafe?.released)
   const selectedShowsOnPortal = Boolean(selectedDocSafe?.show_in_employer_portal)
