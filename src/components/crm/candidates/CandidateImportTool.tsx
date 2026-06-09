@@ -400,13 +400,15 @@ const filteredStandardOptions = useMemo(() => {
         }
 
         if (json?.duplicate) {
-          nextRows[rowIndex] = {
-            ...nextRows[rowIndex],
-            imported: false,
-            importError: `Duplicate found: ${json?.match?.matchedOn || 'existing candidate'}`,
-          }
-          skipped += 1
-        } else {
+  nextRows[rowIndex] = {
+    ...nextRows[rowIndex],
+    imported: false,
+    importError: json?.standards_updated
+      ? `Duplicate found — added standards: ${(json?.added_standards || []).join(', ')}`
+      : `Duplicate found: ${json?.match?.matchedOn || 'existing candidate'}`,
+  }
+  skipped += 1
+} else {
           nextRows[rowIndex] = {
             ...nextRows[rowIndex],
             imported: true,
