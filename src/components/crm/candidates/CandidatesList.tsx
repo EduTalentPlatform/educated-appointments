@@ -848,9 +848,15 @@ const visibleStandardOptions = useMemo(() => {
         )}
       </form>
 
-        <button className="crm-btn-primary" onClick={() => setShowForm(true)}>
-          + Add Candidate
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+  <button className="crm-btn-ghost" onClick={() => router.push('/crm/candidates/import')}>
+    Import candidates
+  </button>
+
+  <button className="crm-btn-primary" onClick={() => setShowForm(true)}>
+    + Add Candidate
+  </button>
+</div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
