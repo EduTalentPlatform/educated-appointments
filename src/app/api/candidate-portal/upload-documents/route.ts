@@ -22,7 +22,6 @@ const allowedTypes = [
   'dbs',
   'reference',
   'interview_prep',
-  'gdpr_acceptance',
   'other',
 ]
 
@@ -36,11 +35,13 @@ function safeFileName(name: string) {
 async function uploadDocument({
   supabase,
   candidateId,
+  uploadLinkId,
   file,
   docType,
 }: {
   supabase: ReturnType<typeof getServiceClient>
   candidateId: string
+  uploadLinkId: string
   file: File
   docType: string
 }) {
@@ -65,6 +66,7 @@ async function uploadDocument({
     .from('candidate_documents')
     .insert({
       candidate_id: candidateId,
+      source_upload_link_id: uploadLinkId,
       name: file.name,
       doc_type: docType,
       file_url: null,
@@ -80,6 +82,11 @@ async function uploadDocument({
   if (insertError) {
     await supabase.storage.from(CANDIDATE_DOCUMENT_BUCKET).remove([filePath])
     throw new Error(insertError.message)
+  }
+
+  return {
+    name: file.name,
+    doc_type: docType,
   }
 }
 
@@ -133,10 +140,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-        const { data: uploadLink, error: linkError } = await supabase
+    const { data: uploadLink, error: linkError } = await supabase
       .from('candidate_upload_links')
       .select(
-        'id, candidate_id, requested_document_types, expires_at, revoked_at, used_at',
+        'id, candidate_id, requested_document_types, expires_at, revoked_at',
       )
       .eq('token', token)
       .maybeSingle()
@@ -166,7 +173,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-        const requestedTypes = Array.isArray(uploadLink.requested_document_types)
+    const requestedTypes = Array.isArray(uploadLink.requested_document_types)
       ? uploadLink.requested_document_types
           .map((item: unknown) => String(item || '').trim())
           .filter(Boolean)
@@ -182,13 +189,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const uploadedDocuments = []
+
     for (const file of realFiles) {
-      await uploadDocument({
+      const uploadedDocument = await uploadDocument({
         supabase,
         candidateId: uploadLink.candidate_id,
+        uploadLinkId: uploadLink.id,
         file,
         docType,
       })
+
+      uploadedDocuments.push(uploadedDocument)
     }
 
     await supabase
@@ -198,7 +210,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      uploaded: realFiles.length,
+      uploaded: uploadedDocuments.length,
+      documents: uploadedDocuments,
     })
   } catch (error: any) {
     console.error('Candidate portal upload error:', error)
@@ -206,8 +219,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          'Something went wrong uploading the document.',
+          error?.message || 'Something went wrong uploading the document.',
       },
       { status: 500 },
     )

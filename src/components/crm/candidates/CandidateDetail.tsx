@@ -525,16 +525,10 @@ const [candidateSaveError, setCandidateSaveError] = useState<string | null>(null
   const [showAddApplication, setShowAddApplication] = useState(false)
 const [creatingApplication, setCreatingApplication] = useState(false)
 const [creatingSpeculation, setCreatingSpeculation] = useState(false)
-const [creatingGdprLink, setCreatingGdprLink] = useState(false)
-const [gdprDeclarationUrl, setGdprDeclarationUrl] = useState('')
-const [gdprEmailSubject, setGdprEmailSubject] = useState('')
-const [gdprEmailBody, setGdprEmailBody] = useState('')
 
 const [showUploadLinkForm, setShowUploadLinkForm] = useState(false)
 const [creatingUploadLink, setCreatingUploadLink] = useState(false)
-const [candidateUploadUrl, setCandidateUploadUrl] = useState('')
-const [uploadLinkEmailSubject, setUploadLinkEmailSubject] = useState('')
-const [uploadLinkEmailBody, setUploadLinkEmailBody] = useState('')
+const [lastPortalMessage, setLastPortalMessage] = useState<string | null>(null)
 const [uploadLinkMessage, setUploadLinkMessage] = useState(
   'Please upload the requested documents using the secure link below.',
 )
@@ -840,142 +834,6 @@ useEffect(() => {
   setUpdatingCandidateStatus(false)
 }
 
-function buildGdprEmailDraft(link: string) {
-  const firstName = candidateRecord.first_name || 'there'
-
-  const subject = 'Educated Appointments - Candidate Privacy Declaration'
-
-  const body = `Hi ${firstName},
-
-As part of our recruitment process, we need to make sure you have read and understood how Educated Appointments Ltd stores and uses your personal data.
-
-Please review our Candidate Privacy Notice and complete the short declaration using the secure link below:
-
-${link}
-
-This confirms that you understand how your details, CV, recruitment notes and supporting documents may be stored and used for suitable recruitment opportunities.
-
-The Candidate Privacy Notice explains:
-
-- What personal data we collect and store
-- How we use your information for recruitment purposes
-- How we may contact you about suitable roles
-- When candidate information may be shared with employers or training providers
-- How supporting documents such as CVs, certificates, DBS information, right to work documents and references may be handled
-- Your data protection rights
-- How you can contact us about your data
-
-It also explains how we may use AI-assisted tools to support recruitment administration, such as formatting CVs, summarising notes, preparing candidate profiles and matching experience to suitable vacancies.
-
-AI-assisted tools are used to support our recruiters, not to make final recruitment decisions. Final decisions and candidate submissions are reviewed by a human recruiter.
-
-If you have any questions before completing the declaration, please contact us at info@educatedappointments.co.uk.
-
-Kind regards,
-Joe
-Educated Appointments`
-
-  return { subject, body }
-}
-
-function buildUploadLinkEmailDraft(link: string, gdprLink?: string) {
-  const firstName = candidateRecord.first_name || 'there'
-
-  const requestedLabels = requestedDocumentTypes
-    .map(type => DOCUMENT_TYPES.find(doc => doc.value === type)?.label || type)
-    .join(', ')
-
-  const subject = gdprLink
-    ? 'Educated Appointments - Secure Document Upload & Privacy Declaration'
-    : 'Educated Appointments - Secure Document Upload'
-
-  const gdprSection = gdprLink
-    ? `
-
-As part of our recruitment process, we also need to make sure you have read and understood how Educated Appointments Ltd stores and uses your personal data.
-
-Please review our Candidate Privacy Notice and complete the short declaration using the link below:
-
-${gdprLink}
-
-This confirms that you understand how your details, CV, recruitment notes and supporting documents may be stored and used for suitable recruitment opportunities.
-
-The notice also explains how we may use AI-assisted tools to support recruitment administration, such as formatting CVs, summarising notes and matching experience to suitable vacancies. Final decisions are always reviewed by a human recruiter.`
-    : ''
-
-  const body = `Hi ${firstName},
-
-Please use the secure link below to upload the documents we need for your recruitment file:
-
-${link}
-
-Requested documents:
-${requestedLabels || 'Any relevant documents'}
-
-${uploadLinkMessage || ''}${gdprSection}
-
-Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.
-
-If you have any questions, please contact us at info@educatedappointments.co.uk.
-
-Kind regards,
-Joe
-Educated Appointments`
-
-  return { subject, body }
-}
-
- async function createGdprDeclarationLink() {
-  const confirmed = confirm(
-    'Create a GDPR declaration link for this candidate?',
-  )
-
-  if (!confirmed) return
-
-  setCreatingGdprLink(true)
-
-  const res = await fetch(
-    `/api/crm/candidates/${candidateRecord.id}/gdpr-declaration/create-link`,
-    {
-      method: 'POST',
-    },
-  )
-
-  const json = await res.json()
-
-  if (!res.ok) {
-    alert(json.error || 'Could not create GDPR declaration link.')
-    setCreatingGdprLink(false)
-    return
-  }
-
-  if (json.data) {
-    setCandidateRecord(json.data)
-    setEditCandidateForm(candidateToForm(json.data))
-  }
-
-  setGdprDeclarationUrl(json.declarationUrl || '')
-
-if (json.declarationUrl) {
-  const draft = buildGdprEmailDraft(json.declarationUrl)
-
-  setGdprEmailSubject(draft.subject)
-  setGdprEmailBody(draft.body)
-
-  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-    await navigator.clipboard.writeText(draft.body).catch(() => {})
-  }
-}
-
-alert(
-  json.declarationUrl
-    ? 'GDPR declaration link and email draft created. Email copied to clipboard.'
-    : 'GDPR declaration link created.',
-)
-
-  setCreatingGdprLink(false)
-} 
-
 async function deleteCandidate() {
   if (applications.length > 0) {
     alert(
@@ -1023,34 +881,14 @@ async function createCandidateUploadLink() {
     return
   }
 
+  const confirmed = confirm(
+    `Send a secure candidate portal link to ${candidateRecord.email || 'this candidate'}?`,
+  )
+
+  if (!confirmed) return
+
   setCreatingUploadLink(true)
-
-  let gdprLink = ''
-
-  if (requestedDocumentTypes.includes('gdpr_acceptance')) {
-    const gdprRes = await fetch(
-      `/api/crm/candidates/${candidateRecord.id}/gdpr-declaration/create-link`,
-      {
-        method: 'POST',
-      },
-    )
-
-    const gdprJson = await gdprRes.json().catch(() => null)
-
-    if (!gdprRes.ok) {
-      alert(gdprJson?.error || 'Could not create GDPR declaration link.')
-      setCreatingUploadLink(false)
-      return
-    }
-
-    if (gdprJson?.data) {
-      setCandidateRecord(gdprJson.data)
-      setEditCandidateForm(candidateToForm(gdprJson.data))
-    }
-
-    gdprLink = gdprJson?.declarationUrl || ''
-    setGdprDeclarationUrl(gdprLink)
-  }
+  setLastPortalMessage(null)
 
   const res = await fetch('/api/crm/candidate-upload-links', {
     method: 'POST',
@@ -1065,38 +903,21 @@ async function createCandidateUploadLink() {
   const json = await res.json().catch(() => null)
 
   if (!res.ok) {
-    alert(json?.error || 'Could not create upload link.')
+    alert(json?.error || 'Could not send candidate portal link.')
     setCreatingUploadLink(false)
     return
   }
 
-  const uploadUrl = json.uploadUrl || ''
-
-  setCandidateUploadUrl(uploadUrl)
-
-  if (uploadUrl) {
-    const draft = buildUploadLinkEmailDraft(uploadUrl, gdprLink)
-
-    setUploadLinkEmailSubject(draft.subject)
-    setUploadLinkEmailBody(draft.body)
-
-    if (gdprLink) {
-      setGdprEmailSubject(draft.subject)
-      setGdprEmailBody(draft.body)
-    }
-
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(draft.body).catch(() => {})
-    }
-  }
-
   setShowUploadLinkForm(false)
   setCreatingUploadLink(false)
+  setLastPortalMessage(
+    json?.message ||
+      `Candidate portal link sent to ${candidateRecord.email || 'candidate'}.`,
+  )
 
   alert(
-    uploadUrl
-      ? 'Candidate upload link and email draft created. Email copied to clipboard.'
-      : 'Candidate upload link created.',
+    json?.message ||
+      `Candidate portal link sent to ${candidateRecord.email || 'candidate'}.`,
   )
 }
 
@@ -1956,22 +1777,13 @@ async function deleteActivity(activityId: string) {
             )}
           </div>
 
-          <button
-  type="button"
-  className="crm-btn-ghost"
-  onClick={createGdprDeclarationLink}
-  disabled={creatingGdprLink}
->
-  {creatingGdprLink ? 'Creating...' : 'Create GDPR Link'}
-</button>
-
 <button
   type="button"
   className="crm-btn-ghost"
   onClick={() => setShowUploadLinkForm(true)}
   disabled={creatingUploadLink}
 >
-  {creatingUploadLink ? 'Creating...' : 'Create Upload Link'}
+  {creatingUploadLink ? 'Sending...' : 'Send Candidate Portal Link'}
 </button>
           
 <button className="crm-btn-ghost" onClick={openEditCandidate}>
@@ -2042,7 +1854,7 @@ async function deleteActivity(activityId: string) {
       }}
     >
       <div>
-        <p className="crm-card-title">Create candidate upload link</p>
+        <p className="crm-card-title">Send candidate portal link</p>
         <p
           style={{
             fontSize: 12,
@@ -2051,9 +1863,9 @@ async function deleteActivity(activityId: string) {
             lineHeight: 1.5,
           }}
         >
-          Select the documents you want the candidate to upload. The link is
-          secure and documents will go straight into this candidate&apos;s CRM
-          record.
+          Select the documents you want the candidate to upload. The portal will also
+  ask them to accept the Candidate Privacy Notice if this has not already been
+  signed.
         </p>
       </div>
 
@@ -2077,7 +1889,9 @@ async function deleteActivity(activityId: string) {
           marginTop: 8,
         }}
       >
-        {DOCUMENT_TYPES.filter(doc => doc.value !== 'formatted_cv').map(doc => {
+        {DOCUMENT_TYPES.filter(
+  doc => doc.value !== 'formatted_cv' && doc.value !== 'gdpr_acceptance',
+).map(doc => {
           const checked = requestedDocumentTypes.includes(doc.value)
 
           return (
@@ -2145,13 +1959,13 @@ async function deleteActivity(activityId: string) {
         onClick={createCandidateUploadLink}
         disabled={creatingUploadLink}
       >
-        {creatingUploadLink ? 'Creating...' : 'Create secure upload link'}
+        {creatingUploadLink ? 'Sending...' : 'Send portal link'}
       </button>
     </div>
   </div>
 )}
 
-      {candidateUploadUrl && (
+      {lastPortalMessage && (
   <div
     className="crm-card"
     style={{
@@ -2162,184 +1976,17 @@ async function deleteActivity(activityId: string) {
       background: '#f0fdf4',
     }}
   >
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: 12,
-        alignItems: 'flex-start',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div>
-        <p className="crm-card-title">Candidate upload email created</p>
-        <p
-          style={{
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            marginTop: 4,
-            lineHeight: 1.5,
-          }}
-        >
-          Copy this email and send it to the candidate. Any uploaded documents
-          will attach directly to this candidate record.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className="crm-btn-ghost crm-btn-sm"
-          onClick={() => navigator.clipboard.writeText(candidateUploadUrl)}
-        >
-          Copy link
-        </button>
-
-        <button
-          type="button"
-          className="crm-btn-primary crm-btn-sm"
-          onClick={() =>
-            navigator.clipboard.writeText(
-              `Subject: ${uploadLinkEmailSubject}\n\n${uploadLinkEmailBody}`,
-            )
-          }
-        >
-          Copy email
-        </button>
-
-        {candidateRecord.email && (
-          <a
-            className="crm-btn-ghost crm-btn-sm"
-            href={`mailto:${candidateRecord.email}?subject=${encodeURIComponent(
-              uploadLinkEmailSubject,
-            )}&body=${encodeURIComponent(uploadLinkEmailBody)}`}
-          >
-            Open email
-          </a>
-        )}
-      </div>
-    </div>
-
     <div>
-      <label className="crm-label">Subject</label>
-      <input
-        className="crm-input"
-        value={uploadLinkEmailSubject}
-        onChange={event => setUploadLinkEmailSubject(event.target.value)}
-      />
-    </div>
-
-    <div>
-      <label className="crm-label">Email body</label>
-      <textarea
-        className="crm-input"
-        rows={10}
-        value={uploadLinkEmailBody}
-        onChange={event => setUploadLinkEmailBody(event.target.value)}
-        style={{ lineHeight: 1.6 }}
-      />
-    </div>
-  </div>
-)}
-
-      {gdprDeclarationUrl && (
-  <div
-    className="crm-card"
-    style={{
-      marginBottom: 14,
-      display: 'grid',
-      gap: 12,
-    }}
-  >
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: 12,
-        alignItems: 'flex-start',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div>
-        <p className="crm-card-title">GDPR declaration email created</p>
-        <p
-          style={{
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            marginTop: 4,
-            lineHeight: 1.5,
-          }}
-        >
-          Copy this email and send it to the candidate. The declaration link is
-          unique to this candidate.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className="crm-btn-ghost crm-btn-sm"
-          onClick={() => navigator.clipboard.writeText(gdprDeclarationUrl)}
-        >
-          Copy link
-        </button>
-
-        <button
-          type="button"
-          className="crm-btn-primary crm-btn-sm"
-          onClick={() =>
-            navigator.clipboard.writeText(
-              `Subject: ${gdprEmailSubject}\n\n${gdprEmailBody}`,
-            )
-          }
-        >
-          Copy email
-        </button>
-
-        {candidateRecord.email && (
-          <a
-            className="crm-btn-ghost crm-btn-sm"
-            href={`mailto:${candidateRecord.email}?subject=${encodeURIComponent(
-              gdprEmailSubject,
-            )}&body=${encodeURIComponent(gdprEmailBody)}`}
-          >
-            Open email
-          </a>
-        )}
-      </div>
-    </div>
-
-    <div>
-      <label className="crm-label">Subject</label>
-      <input
-        className="crm-input"
-        value={gdprEmailSubject}
-        onChange={event => setGdprEmailSubject(event.target.value)}
-      />
-    </div>
-
-    <div>
-      <label className="crm-label">Email body</label>
-      <textarea
-        className="crm-input"
-        rows={10}
-        value={gdprEmailBody}
-        onChange={event => setGdprEmailBody(event.target.value)}
-        style={{ lineHeight: 1.6 }}
-      />
-    </div>
-
-    <div>
-      <label className="crm-label">Declaration link</label>
+      <p className="crm-card-title">Candidate portal email sent</p>
       <p
         style={{
           fontSize: 12,
           color: 'var(--text-muted)',
           marginTop: 4,
-          wordBreak: 'break-all',
+          lineHeight: 1.5,
         }}
       >
-        {gdprDeclarationUrl}
+        {lastPortalMessage}
       </p>
     </div>
   </div>

@@ -28,8 +28,8 @@ function ExpiredLinkPage({ message }: { message: string }) {
           <div className="ea-policy-hero-inner">
             <div className="ea-policy-hero-grid">
               <div>
-                <p className="section-eyebrow">Candidate document upload</p>
-                <h1>Upload link unavailable</h1>
+                <p className="section-eyebrow">Candidate portal</p>
+                <h1>Portal link unavailable</h1>
                 <p>{message}</p>
               </div>
             </div>
@@ -50,16 +50,23 @@ export default async function CandidateUploadPage({ params }: Props) {
     .from('candidate_upload_links')
     .select(
       `
-            id,
+      id,
       candidate_id,
       requested_document_types,
       message,
       expires_at,
       revoked_at,
+      first_accessed_at,
+      completed_at,
       candidates (
         id,
         first_name,
-        last_name
+        last_name,
+        email,
+        gdpr_status,
+        gdpr_accepted_at,
+        gdpr_policy_version,
+        gdpr_policy_url
       )
     `,
     )
@@ -67,15 +74,22 @@ export default async function CandidateUploadPage({ params }: Props) {
     .maybeSingle()
 
   if (!uploadLink) {
-    return <ExpiredLinkPage message="This upload link could not be found." />
+    return <ExpiredLinkPage message="This portal link could not be found." />
   }
 
   if (uploadLink.revoked_at) {
-    return <ExpiredLinkPage message="This upload link has been revoked." />
+    return <ExpiredLinkPage message="This portal link has been revoked." />
   }
 
   if (new Date(uploadLink.expires_at).getTime() < Date.now()) {
-    return <ExpiredLinkPage message="This upload link has expired." />
+    return <ExpiredLinkPage message="This portal link has expired." />
+  }
+
+  if (!uploadLink.first_accessed_at) {
+    await supabase
+      .from('candidate_upload_links')
+      .update({ first_accessed_at: new Date().toISOString() })
+      .eq('id', uploadLink.id)
   }
 
   const candidate = Array.isArray(uploadLink.candidates)
@@ -86,6 +100,10 @@ export default async function CandidateUploadPage({ params }: Props) {
     candidate?.last_name || ''
   }`.trim()
 
+  const gdprAlreadyAccepted = Boolean(
+    candidate?.gdpr_accepted_at || candidate?.gdpr_status === 'accepted',
+  )
+
   return (
     <>
       <PageEffects />
@@ -94,8 +112,12 @@ export default async function CandidateUploadPage({ params }: Props) {
       <CandidateDocumentUploadPortal
         token={token}
         candidateName={candidateName}
+        candidateEmail={candidate?.email || ''}
         message={uploadLink.message}
         requestedDocumentTypes={uploadLink.requested_document_types || []}
+        gdprAlreadyAccepted={gdprAlreadyAccepted}
+        gdprAcceptedAt={candidate?.gdpr_accepted_at || null}
+        portalCompleted={Boolean(uploadLink.completed_at)}
       />
 
       <Footer />
