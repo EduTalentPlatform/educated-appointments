@@ -29,6 +29,7 @@ const ROLE_TYPE_HIERARCHY: Record<string, { subTypes: string[] }> = {
       'End-Point Assessor (EPA)',
       'Skills Coach',
       'Tutor / Trainer',
+      'ESOL Trainer',
       'Employability Tutor',
       'Distance Learning Tutor',
       'Workshop Facilitator',

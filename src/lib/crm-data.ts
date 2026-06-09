@@ -9,7 +9,8 @@ export const ROLE_TYPE_HIERARCHY: Record<string, { hasStandards: boolean; subTyp
     hasStandards: true,
     subTypes: [
       'Assessor', 'IQA', 'Lead IQA', 'End-Point Assessor (EPA)',
-      'Skills Coach', 'Tutor / Trainer', 'Employability Tutor', 'Distance Learning Tutor',
+      'Skills Coach', 'Tutor / Trainer',
+      'ESOL Trainer', 'Employability Tutor', 'Distance Learning Tutor',
       'Workshop Facilitator', 'Vocational Trainer',
       'Functional Skills Tutor (Maths)', 'Functional Skills Tutor (English)',
       'Learning Support Worker',
