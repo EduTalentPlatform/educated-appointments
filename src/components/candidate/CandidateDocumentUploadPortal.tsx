@@ -13,9 +13,42 @@ const DOCUMENT_TYPES = [
   { value: 'other', label: 'Other document' },
 ]
 
+const REFERENCE_TYPES = [
+  { value: '', label: 'Select reference type...' },
+  { value: 'employment', label: 'Employment reference' },
+  { value: 'character', label: 'Character reference' },
+  { value: 'academic', label: 'Academic reference' },
+  { value: 'other', label: 'Other' },
+]
+
 type UploadedDocument = {
+  id?: string
   name: string
   doc_type: string
+}
+
+type ReferenceEntry = {
+  referee_name: string
+  referee_job_title: string
+  organisation: string
+  relationship: string
+  email: string
+  phone: string
+  reference_type: string
+  notes: string
+}
+
+function emptyReference(): ReferenceEntry {
+  return {
+    referee_name: '',
+    referee_job_title: '',
+    organisation: '',
+    relationship: '',
+    email: '',
+    phone: '',
+    reference_type: '',
+    notes: '',
+  }
 }
 
 export default function CandidateDocumentUploadPortal({
@@ -54,6 +87,17 @@ export default function CandidateDocumentUploadPortal({
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const [certificateName, setCertificateName] = useState('')
+  const [rightToWorkDocumentType, setRightToWorkDocumentType] = useState('')
+  const [dbsOnUpdateService, setDbsOnUpdateService] = useState(false)
+  const [dbsDateOfBirth, setDbsDateOfBirth] = useState('')
+  const [dbsCertificateNumber, setDbsCertificateNumber] = useState('')
+  const [dbsSurnameOnCertificate, setDbsSurnameOnCertificate] = useState('')
+  const [references, setReferences] = useState<ReferenceEntry[]>([
+    emptyReference(),
+    emptyReference(),
+  ])
+
   const [typedName, setTypedName] = useState(candidateName)
   const [typedEmail, setTypedEmail] = useState(candidateEmail)
   const [readAndUnderstood, setReadAndUnderstood] = useState(false)
@@ -65,6 +109,105 @@ export default function CandidateDocumentUploadPortal({
   const [completeError, setCompleteError] = useState<string | null>(null)
   const [completed, setCompleted] = useState(Boolean(portalCompleted))
 
+  const isReference = docType === 'reference'
+
+  function updateReference(
+    index: number,
+    field: keyof ReferenceEntry,
+    value: string,
+  ) {
+    setReferences(current =>
+      current.map((reference, referenceIndex) =>
+        referenceIndex === index
+          ? {
+              ...reference,
+              [field]: value,
+            }
+          : reference,
+      ),
+    )
+  }
+
+  function buildMetadata() {
+    if (docType === 'qualification') {
+      return {
+        certificate_name: certificateName.trim(),
+      }
+    }
+
+    if (docType === 'right_to_work') {
+      return {
+        right_to_work_document_type: rightToWorkDocumentType.trim(),
+      }
+    }
+
+    if (docType === 'dbs') {
+      return {
+        dbs_on_update_service: dbsOnUpdateService,
+        dbs_date_of_birth: dbsDateOfBirth,
+        dbs_certificate_number: dbsCertificateNumber.trim(),
+        dbs_surname_on_certificate: dbsSurnameOnCertificate.trim(),
+      }
+    }
+
+    if (docType === 'reference') {
+      return {
+        references,
+      }
+    }
+
+    return {}
+  }
+
+  function validateBeforeUpload() {
+    if (docType === 'qualification' && !certificateName.trim()) {
+      return 'Please enter what certificate / qualification you are uploading.'
+    }
+
+    if (docType === 'right_to_work' && !rightToWorkDocumentType.trim()) {
+      return 'Please enter what type of right to work document you are uploading.'
+    }
+
+    if (docType === 'dbs' && dbsOnUpdateService) {
+      if (!dbsDateOfBirth) {
+        return 'Please enter your date of birth for the DBS Update Service check.'
+      }
+
+      if (!dbsCertificateNumber.trim()) {
+        return 'Please enter your DBS certificate number.'
+      }
+
+      if (!dbsSurnameOnCertificate.trim()) {
+        return 'Please enter the surname shown on your DBS certificate.'
+      }
+    }
+
+    if (docType === 'reference') {
+      for (let index = 0; index < 2; index += 1) {
+        const reference = references[index]
+        const label = `Reference ${index + 1}`
+
+        if (!reference.referee_name.trim()) {
+          return `${label}: please enter the referee name.`
+        }
+
+        if (!reference.relationship.trim()) {
+          return `${label}: please enter your relationship to the referee.`
+        }
+
+        if (
+          !reference.email.trim() &&
+          !reference.phone.trim() &&
+          !reference.organisation.trim()
+        ) {
+          return `${label}: please enter at least an email, phone number or organisation.`
+        }
+      }
+    }
+
+    return null
+  }
+
   async function submitUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
@@ -72,10 +215,19 @@ export default function CandidateDocumentUploadPortal({
     setError(null)
     setSuccessMessage(null)
 
+    const validationError = validateBeforeUpload()
+
+    if (validationError) {
+      setError(validationError)
+      setUploading(false)
+      return
+    }
+
     const form = e.currentTarget
     const formData = new FormData(form)
     formData.set('token', token)
     formData.set('doc_type', docType)
+    formData.set('metadata', JSON.stringify(buildMetadata()))
 
     const res = await fetch('/api/candidate-portal/upload-documents', {
       method: 'POST',
@@ -94,11 +246,17 @@ export default function CandidateDocumentUploadPortal({
 
     setUploadedDocuments(current => [...current, ...newDocuments])
     setSuccessMessage(
-      `${json?.uploaded || 1} file${json?.uploaded === 1 ? '' : 's'} uploaded successfully.`,
+      isReference
+        ? 'Your two references have been saved securely.'
+        : `${json?.uploaded || 1} file${json?.uploaded === 1 ? '' : 's'} uploaded successfully.`,
     )
     setFileCount(0)
     form.reset()
     setUploading(false)
+
+    if (isReference) {
+      setReferences([emptyReference(), emptyReference()])
+    }
   }
 
   async function completePortal() {
@@ -243,7 +401,7 @@ export default function CandidateDocumentUploadPortal({
           <section className="ea-policy-section">
             <div className="ea-policy-section-title">
               <span>{safeRequestedTypes.length > 0 ? 2 : 1}</span>
-              <h2>Upload file</h2>
+              <h2>{isReference ? 'Provide reference details' : 'Upload file'}</h2>
             </div>
 
             <div className="ea-policy-copy">
@@ -253,7 +411,12 @@ export default function CandidateDocumentUploadPortal({
                   <select
                     className="cp-select"
                     value={docType}
-                    onChange={e => setDocType(e.target.value)}
+                    onChange={e => {
+                      setDocType(e.target.value)
+                      setError(null)
+                      setSuccessMessage(null)
+                      setFileCount(0)
+                    }}
                   >
                     {(safeRequestedTypes.length > 0
                       ? DOCUMENT_TYPES.filter(type =>
@@ -268,29 +431,280 @@ export default function CandidateDocumentUploadPortal({
                   </select>
                 </div>
 
-                <div className="cp-field">
-                  <label className="cp-label">Select file(s)</label>
-                  <input
-                    name="files"
-                    type="file"
-                    className="cp-input"
-                    multiple
-                    required
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
-                    onChange={e => setFileCount(e.target.files?.length ?? 0)}
-                  />
-                  <p className="cp-cv-note">
-                    {fileCount > 0
-                      ? `${fileCount} file${fileCount === 1 ? '' : 's'} selected`
-                      : 'Accepted files: PDF, Word, JPG, PNG or WEBP.'}
-                  </p>
-                </div>
+                {docType === 'qualification' && (
+                  <div className="cp-field">
+                    <label className="cp-label">
+                      What certificate / qualification is this?
+                    </label>
+                    <input
+                      type="text"
+                      className="cp-input"
+                      value={certificateName}
+                      onChange={event => setCertificateName(event.target.value)}
+                      placeholder="e.g. TAQA, A1, CAVA, V1, IQA, AET, PGCE"
+                    />
+                    <p className="cp-cv-note">
+                      Examples: TAQA, A1, CAVA, D32/D33, V1, IQA, Level 4
+                      Quality Assurance, AET, PTLLS, Cert Ed, PGCE,
+                      subject-specific certificates.
+                    </p>
+                  </div>
+                )}
+
+                {docType === 'right_to_work' && (
+                  <div className="cp-field">
+                    <label className="cp-label">
+                      What type of right to work document are you uploading?
+                    </label>
+                    <input
+                      type="text"
+                      className="cp-input"
+                      value={rightToWorkDocumentType}
+                      onChange={event =>
+                        setRightToWorkDocumentType(event.target.value)
+                      }
+                      placeholder="e.g. UK passport, share code, settled status"
+                    />
+                    <p className="cp-cv-note">
+                      Examples: UK passport, Irish passport, birth certificate
+                      with proof of National Insurance, share code / eVisa,
+                      settled status, pre-settled status, biometric residence
+                      permit, certificate of naturalisation.
+                    </p>
+                  </div>
+                )}
+
+                {docType === 'dbs' && (
+                  <>
+                    <div className="cp-field">
+                      <label className="candidate-declaration-check">
+                        <input
+                          type="checkbox"
+                          checked={dbsOnUpdateService}
+                          onChange={event =>
+                            setDbsOnUpdateService(event.target.checked)
+                          }
+                        />
+                        <span>I am on the DBS Update Service</span>
+                      </label>
+                    </div>
+
+                    {dbsOnUpdateService && (
+                      <div
+                        className="candidate-declaration-fields"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <label>
+                          Date of birth
+                          <input
+                            type="date"
+                            value={dbsDateOfBirth}
+                            onChange={event =>
+                              setDbsDateOfBirth(event.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label>
+                          DBS certificate number
+                          <input
+                            type="text"
+                            value={dbsCertificateNumber}
+                            onChange={event =>
+                              setDbsCertificateNumber(event.target.value)
+                            }
+                            placeholder="Certificate number"
+                          />
+                        </label>
+
+                        <label>
+                          Surname on certificate
+                          <input
+                            type="text"
+                            value={dbsSurnameOnCertificate}
+                            onChange={event =>
+                              setDbsSurnameOnCertificate(event.target.value)
+                            }
+                            placeholder="Surname as shown on DBS"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isReference ? (
+                  <div style={{ display: 'grid', gap: 18 }}>
+                    {[0, 1].map(index => {
+                      const reference = references[index]
+
+                      return (
+                        <div
+                          key={index}
+                          className="ea-policy-note"
+                          style={{ display: 'grid', gap: 12 }}
+                        >
+                          <h3 style={{ margin: 0 }}>
+                            Reference {index + 1}
+                          </h3>
+
+                          <div className="candidate-declaration-fields">
+                            <label>
+                              Referee name
+                              <input
+                                type="text"
+                                value={reference.referee_name}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'referee_name',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Job title
+                              <input
+                                type="text"
+                                value={reference.referee_job_title}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'referee_job_title',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Organisation
+                              <input
+                                type="text"
+                                value={reference.organisation}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'organisation',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Relationship to you
+                              <input
+                                type="text"
+                                value={reference.relationship}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'relationship',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="e.g. Line manager"
+                              />
+                            </label>
+
+                            <label>
+                              Email
+                              <input
+                                type="email"
+                                value={reference.email}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'email',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Phone
+                              <input
+                                type="tel"
+                                value={reference.phone}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'phone',
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+
+                            <label>
+                              Reference type
+                              <select
+                                value={reference.reference_type}
+                                onChange={event =>
+                                  updateReference(
+                                    index,
+                                    'reference_type',
+                                    event.target.value,
+                                  )
+                                }
+                              >
+                                {REFERENCE_TYPES.map(type => (
+                                  <option key={type.value} value={type.value}>
+                                    {type.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+
+                          <label>
+                            Notes
+                            <textarea
+                              rows={3}
+                              value={reference.notes}
+                              onChange={event =>
+                                updateReference(
+                                  index,
+                                  'notes',
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="Anything we should know about this reference?"
+                            />
+                          </label>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="cp-field">
+                    <label className="cp-label">Select file(s)</label>
+                    <input
+                      name="files"
+                      type="file"
+                      className="cp-input"
+                      multiple
+                      required
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                      onChange={e => setFileCount(e.target.files?.length ?? 0)}
+                    />
+                    <p className="cp-cv-note">
+                      {fileCount > 0
+                        ? `${fileCount} file${fileCount === 1 ? '' : 's'} selected`
+                        : 'Accepted files: PDF, Word, JPG, PNG or WEBP.'}
+                    </p>
+                  </div>
+                )}
 
                 {error && <div className="cp-error">{error}</div>}
 
                 {successMessage && (
                   <div className="cp-success" style={{ padding: 18 }}>
-                    <h3 className="cp-success-title">Upload received</h3>
+                    <h3 className="cp-success-title">Received</h3>
                     <p className="cp-success-body">{successMessage}</p>
                   </div>
                 )}
@@ -300,13 +714,17 @@ export default function CandidateDocumentUploadPortal({
                   className="cp-submit"
                   disabled={uploading}
                 >
-                  {uploading ? 'Uploading...' : 'Upload document →'}
+                  {uploading
+                    ? 'Saving...'
+                    : isReference
+                      ? 'Save reference details →'
+                      : 'Upload document →'}
                 </button>
               </form>
 
               {uploadedDocuments.length > 0 && (
                 <div className="ea-policy-note" style={{ marginTop: 18 }}>
-                  <strong>Uploaded in this session:</strong>
+                  <strong>Submitted in this session:</strong>
                   <ul className="ea-policy-list" style={{ marginTop: 10 }}>
                     {uploadedDocuments.map((doc, index) => (
                       <li key={`${doc.name}-${index}`}>{doc.name}</li>
@@ -342,7 +760,10 @@ export default function CandidateDocumentUploadPortal({
                   </p>
 
                   <p>
-                    <Link href="/policies/candidate-privacy-notice" target="_blank">
+                    <Link
+                      href="/policies/candidate-privacy-notice"
+                      target="_blank"
+                    >
                       Open Candidate Privacy Notice
                     </Link>
                   </p>
