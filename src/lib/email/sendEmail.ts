@@ -7,6 +7,24 @@ type SendEmailInput = {
   replyTo?: string
 }
 
+const DEFAULT_FROM_EMAIL =
+  'Educated Appointments <noreply@educatedappointments.co.uk>'
+
+function cleanEmailHeader(value?: string | null) {
+  return String(value || '')
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/,$/, '')
+    .trim()
+}
+
+function isValidFromEmail(value: string) {
+  return (
+    /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(value) ||
+    /^.+ <[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>$/.test(value)
+  )
+}
+
 export async function sendEmail({
   to,
   from,
@@ -21,10 +39,13 @@ export async function sendEmail({
     throw new Error('Missing RESEND_API_KEY environment variable.')
   }
 
-  const fromEmail =
-    from ||
-    process.env.INTERVIEW_REQUEST_FROM_EMAIL ||
-    'Educated Appointments <noreply@educatedappointments.co.uk>'
+  const requestedFromEmail = cleanEmailHeader(
+    from || process.env.INTERVIEW_REQUEST_FROM_EMAIL || DEFAULT_FROM_EMAIL,
+  )
+
+  const fromEmail = isValidFromEmail(requestedFromEmail)
+    ? requestedFromEmail
+    : DEFAULT_FROM_EMAIL
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
