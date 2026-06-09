@@ -10,6 +10,7 @@ type DuplicateCandidateRow = {
   email: string | null
   phone: string | null
   linkedin: string | null
+  can_deliver?: string | null
   created_at: string | null
 }
 
@@ -76,6 +77,80 @@ async function lookupPostcode(postcode?: string | null) {
   } catch {}
 
   return { lat: null, lng: null }
+}
+
+function splitStandards(value: unknown) {
+  return String(value ?? '')
+    .split(/[,|\n]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function mergeStandards(existing: unknown, incoming: unknown) {
+  const seen = new Set<string>()
+  const merged: string[] = []
+
+  for (const standard of [...splitStandards(existing), ...splitStandards(incoming)]) {
+    const key = standard.toLowerCase()
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push(standard)
+    }
+  }
+
+  return merged.join(', ')
+}
+
+async function addImportedStandardsToDuplicate(
+  supabase: SupabaseClient,
+  candidate: DuplicateCandidateRow,
+  incomingCanDeliver: unknown,
+) {
+  const incomingStandards = splitStandards(incomingCanDeliver)
+
+  if (incomingStandards.length === 0) {
+    return {
+      candidate,
+      standardsUpdated: false,
+      addedStandards: [],
+    }
+  }
+
+  const existingStandards = splitStandards(candidate.can_deliver)
+  const existingKeys = new Set(existingStandards.map(item => item.toLowerCase()))
+
+  const addedStandards = incomingStandards.filter(
+    standard => !existingKeys.has(standard.toLowerCase()),
+  )
+
+  if (addedStandards.length === 0) {
+    return {
+      candidate,
+      standardsUpdated: false,
+      addedStandards: [],
+    }
+  }
+
+  const nextCanDeliver = mergeStandards(candidate.can_deliver, incomingCanDeliver)
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .update({
+      can_deliver: nextCanDeliver,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', candidate.id)
+    .select('id, first_name, last_name, email, phone, linkedin, can_deliver, created_at')
+    .single()
+
+  if (error) throw error
+
+  return {
+    candidate: data as DuplicateCandidateRow,
+    standardsUpdated: true,
+    addedStandards,
+  }
 }
 
 function normaliseLookingForRoles(value: unknown, fallbackRole?: string | null) {
@@ -163,7 +238,7 @@ async function findExistingCandidate(
   matchedOn: DuplicateMatchType
 } | null> {
   const selectFields =
-    'id, first_name, last_name, email, phone, linkedin, created_at'
+  'id, first_name, last_name, email, phone, linkedin, can_deliver, created_at'
 
   if (values.email) {
     const { data, error } = await supabase
@@ -257,13 +332,23 @@ export async function POST(request: NextRequest) {
     })
 
     if (duplicate?.candidate) {
-      return NextResponse.json({
-        data: duplicate.candidate,
-        duplicate: true,
-        matchedOn: duplicate.matchedOn,
-        message: 'Candidate already exists. No duplicate candidate was created.',
-      })
-    }
+  const duplicateUpdate = await addImportedStandardsToDuplicate(
+    supabase,
+    duplicate.candidate,
+    body.can_deliver,
+  )
+
+  return NextResponse.json({
+    data: duplicateUpdate.candidate,
+    duplicate: true,
+    standards_updated: duplicateUpdate.standardsUpdated,
+    added_standards: duplicateUpdate.addedStandards,
+    match: {
+      matchedOn: duplicate.matchedOn,
+      candidate: duplicateUpdate.candidate,
+    },
+  })
+}
 
     const { lat, lng } = await lookupPostcode(body.postcode)
     const primaryRole = body.seeking_role_type || body.sub_role_type || null
