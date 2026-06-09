@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ROLE_TYPE_HIERARCHY, MAIN_ROLE_TYPES } from '@/lib/crm-data'
+import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 import StandardsSelector from '@/components/crm/StandardsSelector'
 import ClientPortalAccessPanel from './ClientPortalAccessPanel'
 
@@ -146,6 +146,7 @@ interface Props {
 }
 
 export default function ClientDetail({
+
   client: initialClient,
   vacancies: initialVacancies,
   contacts: initialContacts,
@@ -153,6 +154,8 @@ export default function ClientDetail({
   portalUsers = [],
   initialSites = [],
 }: Props) {
+  const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -1308,18 +1311,18 @@ async function deleteSite(id: string) {
                   <label className="crm-label">Main role type</label>
                   <select className="crm-select" value={mainRoleType} onChange={e => { setMainRoleType(e.target.value); setVacForm(f => ({...f, sector: ''})); setStandards([]) }}>
                     <option value="">Select type...</option>
-                    {MAIN_ROLE_TYPES.map(r => <option key={r}>{r}</option>)}
+                    {crmMainRoleTypes.map(r => <option key={r}>{r}</option>)}
                   </select>
                 </div>
                 <div className="crm-field">
                   <label className="crm-label">Specific role</label>
                   <select className="crm-select" value={vacForm.sector} onChange={e => setVacForm(f => ({...f, sector: e.target.value}))} disabled={!mainRoleType}>
                     <option value="">{mainRoleType ? 'Select role...' : 'Select type first'}</option>
-                    {mainRoleType && ROLE_TYPE_HIERARCHY[mainRoleType]?.subTypes.map(s => <option key={s}>{s}</option>)}
+                    {mainRoleType && crmRoleTypeHierarchy[mainRoleType]?.subTypes.map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
-              {mainRoleType && ROLE_TYPE_HIERARCHY[mainRoleType]?.hasStandards && (
+              {mainRoleType && crmRoleTypeHierarchy[mainRoleType]?.hasStandards && (
                 <div className="crm-field">
                   <label className="crm-label">Apprenticeship standards required</label>
                   <StandardsSelector selected={standards} onChange={setStandards} />

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ROLE_TYPE_HIERARCHY, MAIN_ROLE_TYPES } from '@/lib/crm-data'
+import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 import StandardsSelector from '@/components/crm/StandardsSelector'
 
 type Client = {
@@ -36,7 +36,10 @@ const VACANCY_REGIONS = [
   'Hybrid',
 ]
 
-export default function NewVacancyForm({ clients }: Props) {
+export default function NewVacancyForm({
+ clients }: Props) {
+  const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
+
   const router = useRouter()
 
   const [saving, setSaving] = useState(false)
@@ -236,7 +239,7 @@ export default function NewVacancyForm({ clients }: Props) {
               }}
             >
               <option value="">Select type...</option>
-              {MAIN_ROLE_TYPES.map(role => (
+              {crmMainRoleTypes.map(role => (
                 <option key={role} value={role}>
                   {role}
                 </option>
@@ -262,7 +265,7 @@ export default function NewVacancyForm({ clients }: Props) {
               </option>
 
               {mainRoleType &&
-                ROLE_TYPE_HIERARCHY[mainRoleType]?.subTypes.map(role => (
+                crmRoleTypeHierarchy[mainRoleType]?.subTypes.map(role => (
                   <option key={role} value={role}>
                     {role}
                   </option>
@@ -271,7 +274,7 @@ export default function NewVacancyForm({ clients }: Props) {
           </div>
         </div>
 
-        {mainRoleType && ROLE_TYPE_HIERARCHY[mainRoleType]?.hasStandards && (
+        {mainRoleType && crmRoleTypeHierarchy[mainRoleType]?.hasStandards && (
           <div className="crm-field" style={{ marginTop: 14 }}>
             <label className="crm-label">Apprenticeship standards required</label>
             <StandardsSelector selected={standards} onChange={setStandards} />

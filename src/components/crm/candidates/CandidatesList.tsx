@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ROLE_TYPE_HIERARCHY, MAIN_ROLE_TYPES } from '@/lib/crm-data'
+import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -110,10 +110,13 @@ interface Props {
 }
 
 export default function CandidatesList({
+
   initialCandidates,
   totalCandidatesCount,
   activelyLookingCandidatesCount,
 }: Props) {
+  const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -291,7 +294,7 @@ error = fallback.error
       .map(c => c.main_role_type)
       .filter(Boolean) as string[]
 
-    return Array.from(new Set([...MAIN_ROLE_TYPES, ...fromCandidates])).sort()
+    return Array.from(new Set([...crmMainRoleTypes, ...fromCandidates])).sort()
   }, [candidates])
 
   const specificRoleOptions = useMemo(() => {

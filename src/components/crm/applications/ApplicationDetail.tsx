@@ -9,7 +9,7 @@ import type {
 } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { ROLE_TYPE_HIERARCHY, MAIN_ROLE_TYPES } from '@/lib/crm-data'
+import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 
 type Application = {
   id: string
@@ -574,6 +574,7 @@ async function openSecureDocument(
 }
 
 export default function ApplicationDetail({
+
   application: initial,
   documents,
   vacancyDocuments = [],
@@ -584,6 +585,7 @@ export default function ApplicationDetail({
   placement: initialPlacement = null,
   standards = [],
 }: Props) {
+
   const [app, setApp] = useState(initial)
   const [availableStandards, setAvailableStandards] =
   useState<ApprenticeshipStandard[]>(standards)
@@ -4254,9 +4256,11 @@ function RoleAndStandardsInterviewCard({
   const [standardSectorFilter, setStandardSectorFilter] = useState('all')
   const [manualStandardInput, setManualStandardInput] = useState('')
 
+  const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
+
   const specificRoleOptions = useMemo(() => {
     const options =
-      ROLE_TYPE_HIERARCHY[candidateFactsForm.main_role_type]?.subTypes ?? []
+      crmRoleTypeHierarchy[candidateFactsForm.main_role_type]?.subTypes ?? []
 
     return uniqueCleanList([
       ...options,
@@ -4390,7 +4394,7 @@ function RoleAndStandardsInterviewCard({
           >
             <option value="">Select type...</option>
 
-            {MAIN_ROLE_TYPES.map(roleType => (
+            {crmMainRoleTypes.map(roleType => (
               <option key={roleType} value={roleType}>
                 {roleType}
               </option>

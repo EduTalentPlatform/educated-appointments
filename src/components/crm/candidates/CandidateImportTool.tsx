@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
-import { ALL_STANDARDS, MAIN_ROLE_TYPES, ROLE_TYPE_HIERARCHY } from '@/lib/crm-data'
+import { ALL_STANDARDS } from '@/lib/crm-data'
+import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 
 type ImportRow = {
   rowNumber: number
@@ -230,6 +231,9 @@ function getMappedCandidate(
 }
 
 export default function CandidateImportTool() {
+  const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
+
+
   const router = useRouter()
 
   const [fileName, setFileName] = useState('')
@@ -262,7 +266,7 @@ const selectedStandards = splitCommaList(defaults.can_deliver)
 
 const specificRoleOptions = useMemo(() => {
   const hierarchyOptions =
-    ROLE_TYPE_HIERARCHY[defaults.main_role_type]?.subTypes ?? []
+    crmRoleTypeHierarchy[defaults.main_role_type]?.subTypes ?? []
 
   return Array.from(
     new Set([...hierarchyOptions, ...selectedSpecificRoles].filter(Boolean)),
@@ -574,7 +578,7 @@ const filteredStandardOptions = useMemo(() => {
     }
   >
     <option value="">Select main role type...</option>
-    {MAIN_ROLE_TYPES.map(role => (
+    {crmMainRoleTypes.map(role => (
       <option key={role} value={role}>
         {role}
       </option>
