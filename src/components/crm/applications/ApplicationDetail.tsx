@@ -658,8 +658,15 @@ const [
 ] = useState('')
 const [clientEmailSubject, setClientEmailSubject] = useState('')
 const [sendingRolePortalEmail, setSendingRolePortalEmail] = useState(false)
+const [previewingRolePortalEmail, setPreviewingRolePortalEmail] = useState(false)
 const [rolePortalEmailMessage, setRolePortalEmailMessage] = useState<string | null>(null)
 const [rolePortalEmailError, setRolePortalEmailError] = useState<string | null>(null)
+const [rolePortalEmailPreview, setRolePortalEmailPreview] = useState<{
+  subject?: string
+  text?: string
+  html?: string
+  body?: string
+} | null>(null)
 const [rolePortalRequestOpen, setRolePortalRequestOpen] = useState(false)
 const [rolePortalRequestedDocuments, setRolePortalRequestedDocuments] = useState<string[]>([
   'cv',
@@ -674,6 +681,18 @@ const [rolePortalMessage, setRolePortalMessage] = useState('')
   const v = app.vacancies
   const client = Array.isArray(v?.clients) ? v?.clients?.[0] : v?.clients
 
+  function buildRolePortalEmailPayload(previewOnly = false) {
+  return {
+    candidate_id: c.id,
+    application_id: app.id,
+    requested_document_types: rolePortalRequestedDocuments,
+    message:
+      rolePortalMessage.trim() ||
+      `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
+    preview_only: previewOnly,
+  }
+}
+
     function toggleRolePortalRequestedDocument(type: string) {
     setRolePortalRequestedDocuments(current =>
       current.includes(type)
@@ -681,6 +700,56 @@ const [rolePortalMessage, setRolePortalMessage] = useState('')
         : [...current, type],
     )
   }
+
+  async function previewRoleCandidatePortalEmail() {
+  if (!c?.id) {
+    setRolePortalEmailError('This application does not have a candidate linked.')
+    return
+  }
+
+  if (!c?.email) {
+    setRolePortalEmailError(
+      'The candidate needs an email address before previewing the portal email.',
+    )
+    return
+  }
+
+  if (rolePortalRequestedDocuments.length === 0) {
+    setRolePortalEmailError('Please select at least one document to request.')
+    return
+  }
+
+  setPreviewingRolePortalEmail(true)
+  setRolePortalEmailMessage(null)
+  setRolePortalEmailError(null)
+  setRolePortalEmailPreview(null)
+
+  try {
+    const res = await fetch('/api/crm/candidate-upload-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildRolePortalEmailPayload(true)),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      throw new Error(json?.error || 'Could not preview the candidate portal email.')
+    }
+
+    setRolePortalEmailPreview(json?.emailPreview || null)
+
+    if (!json?.emailPreview) {
+      setRolePortalEmailError('The preview was created, but no email content was returned.')
+    }
+  } catch (error: any) {
+    setRolePortalEmailError(
+      error?.message || 'Could not preview the candidate portal email.',
+    )
+  } finally {
+    setPreviewingRolePortalEmail(false)
+  }
+}
 
   async function sendRoleCandidatePortalEmail() {
   if (!c?.id) {
@@ -701,21 +770,15 @@ const [rolePortalMessage, setRolePortalMessage] = useState('')
   }
 
   setSendingRolePortalEmail(true)
-  setRolePortalEmailMessage(null)
-  setRolePortalEmailError(null)
+setRolePortalEmailMessage(null)
+setRolePortalEmailError(null)
+setRolePortalEmailPreview(null)
 
   try {
     const res = await fetch('/api/crm/candidate-upload-links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        candidate_id: c.id,
-        application_id: app.id,
-        requested_document_types: rolePortalRequestedDocuments,
-        message:
-          rolePortalMessage.trim() ||
-          `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
-      }),
+      body: JSON.stringify(buildRolePortalEmailPayload(false)),
     })
 
     const json = await res.json().catch(() => null)
@@ -2215,24 +2278,153 @@ Kind regards,`
                 {rolePortalRequestedDocuments.length === 1 ? '' : 's'}
               </p>
 
-              <button
-                type="button"
-                className="crm-btn-primary"
-                onClick={sendRoleCandidatePortalEmail}
-                disabled={
-                  sendingRolePortalEmail ||
-                  rolePortalRequestedDocuments.length === 0
-                }
-              >
-                {sendingRolePortalEmail
-                  ? 'Sending...'
-                  : 'Send role portal email'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+  <button
+    type="button"
+    className="crm-btn-ghost"
+    onClick={previewRoleCandidatePortalEmail}
+    disabled={
+      previewingRolePortalEmail ||
+      sendingRolePortalEmail ||
+      rolePortalRequestedDocuments.length === 0
+    }
+  >
+    {previewingRolePortalEmail ? 'Building preview...' : 'Preview email'}
+  </button>
+
+  <button
+    type="button"
+    className="crm-btn-primary"
+    onClick={sendRoleCandidatePortalEmail}
+    disabled={
+      sendingRolePortalEmail ||
+      rolePortalRequestedDocuments.length === 0
+    }
+  >
+    {sendingRolePortalEmail ? 'Sending...' : 'Send role portal email'}
+  </button>
+</div>
             </div>
           </div>
         )}
       </div>
             
+            {rolePortalEmailPreview && (
+  <div
+    className="crm-card"
+    style={{
+      marginBottom: 14,
+      padding: 14,
+      display: 'grid',
+      gap: 12,
+      border: '1.5px solid #bae6fd',
+      background: '#f0f9ff',
+    }}
+  >
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'flex-start',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <p className="crm-card-title">Candidate portal email preview</p>
+        <p
+          style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+            lineHeight: 1.5,
+          }}
+        >
+          Review the email below before sending it to {c?.email || 'the candidate'}.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="crm-btn-ghost crm-btn-sm"
+          onClick={() => setRolePortalEmailPreview(null)}
+          disabled={sendingRolePortalEmail}
+        >
+          Close preview
+        </button>
+
+        <button
+          type="button"
+          className="crm-btn-primary crm-btn-sm"
+          onClick={sendRoleCandidatePortalEmail}
+          disabled={sendingRolePortalEmail}
+        >
+          {sendingRolePortalEmail ? 'Sending...' : 'Send this email'}
+        </button>
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: 'grid',
+        gap: 10,
+        padding: 12,
+        borderRadius: 12,
+        background: '#fff',
+        border: '1px solid var(--border-light)',
+      }}
+    >
+      <div>
+        <p className="crm-label">To</p>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 800 }}>
+          {c?.email || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="crm-label">Subject</p>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 800 }}>
+          {rolePortalEmailPreview.subject || '—'}
+        </p>
+      </div>
+
+      <div>
+        <p className="crm-label">Email body</p>
+        <div
+          style={{
+            whiteSpace: 'pre-wrap',
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: 'var(--text-dark)',
+            padding: 12,
+            borderRadius: 10,
+            background: 'var(--light-bg)',
+            border: '1px solid var(--border-light)',
+            maxHeight: 360,
+            overflowY: 'auto',
+          }}
+        >
+          {rolePortalEmailPreview.text ||
+            rolePortalEmailPreview.body ||
+            'No preview body returned.'}
+        </div>
+      </div>
+
+      <p
+        style={{
+          margin: 0,
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
+        The secure portal link will be generated when you click “Send this email”.
+      </p>
+    </div>
+  </div>
+)}
+
             {rolePortalEmailMessage && (
         <div
           style={{

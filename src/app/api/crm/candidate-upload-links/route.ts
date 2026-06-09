@@ -286,8 +286,9 @@ export async function POST(request: NextRequest) {
     const supabase = getServiceClient()
 
     const candidateId = clean(body.candidate_id)
-    const applicationId = clean(body.application_id || body.applicationId)
-    const message = clean(body.message) || null
+const applicationId = clean(body.application_id || body.applicationId)
+const message = clean(body.message) || null
+const previewOnly = body.preview_only === true || body.previewOnly === true
 
     const requestedDocumentTypes: string[] = Array.isArray(
       body.requested_document_types,
@@ -401,6 +402,26 @@ export async function POST(request: NextRequest) {
       roleContext = buildRoleEmailContext(application)
     }
 
+        if (previewOnly) {
+      const previewUploadUrl = `${getSiteUrl()}/candidate-portal/upload/[secure-link-created-when-sent]`
+
+      const firstName = candidate.first_name || 'there'
+      const emailPreview = buildCandidatePortalEmail({
+        firstName,
+        uploadUrl: previewUploadUrl,
+        requestedDocumentTypes,
+        message,
+        roleContext,
+      })
+
+      return NextResponse.json({
+        preview: true,
+        emailPreview,
+        roleContext,
+        candidate,
+      })
+    }
+    
     const { data: uploadLink, error } = await supabase
       .from('candidate_upload_links')
       .insert({
