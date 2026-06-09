@@ -87,7 +87,7 @@ function buildCandidatePortalEmail({
     '',
     'Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.',
     '',
-    'If you have any questions, please contact us at info@educatedappointments.co.uk.',
+    'If you have any questions, please contact us at joseph@educatedappointments.co.uk.',
     '',
     'Kind regards,',
     'Joe',
@@ -131,7 +131,7 @@ function buildCandidatePortalEmail({
 
       <p>Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.</p>
 
-      <p>If you have any questions, please contact us at info@educatedappointments.co.uk.</p>
+      <p>If you have any questions, please contact us at joseph@educatedappointments.co.uk.</p>
 
       <p>
         Kind regards,<br />
