@@ -26,6 +26,18 @@ type Candidate = {
   status?: string | null
   created_at: string
   applications?: any[]
+    looking_for_roles?: string[] | string | null
+  qualifications?: string | null
+  notes?: string | null
+  town_city?: string | null
+  county?: string | null
+  lat?: number | string | null
+  lng?: number | string | null
+  latitude?: number | string | null
+  longitude?: number | string | null
+  postcode_normalised?: string | null
+  postcode_geocoded_at?: string | null
+  distance_miles?: number | null
 }
 
 type ClientRef = {
@@ -106,6 +118,15 @@ export default function CandidatesList({
   const supabase = createClient()
 
   const [candidates, setCandidates] = useState(initialCandidates)
+
+    const [radiusKeyword, setRadiusKeyword] = useState('')
+  const [radiusPostcode, setRadiusPostcode] = useState('')
+  const [radiusMiles, setRadiusMiles] = useState('15')
+  const [radiusStatus, setRadiusStatus] = useState('any')
+  const [radiusSearching, setRadiusSearching] = useState(false)
+  const [radiusSearchError, setRadiusSearchError] = useState<string | null>(null)
+  const [radiusSearchSummary, setRadiusSearchSummary] = useState<string | null>(null)
+  const [radiusSearchResults, setRadiusSearchResults] = useState<Candidate[] | null>(null)
 
   const [search, setSearch] = useState('')
   const [mainRoleFilter, setMainRoleFilter] = useState('all')
@@ -209,6 +230,62 @@ error = fallback.error
     setVacanciesLoading(false)
   }
 
+    async function runRadiusSearch(event?: FormEvent) {
+    event?.preventDefault()
+
+    if (!radiusPostcode.trim()) {
+      setRadiusSearchError('Please enter a postcode.')
+      return
+    }
+
+    setRadiusSearching(true)
+    setRadiusSearchError(null)
+    setRadiusSearchSummary(null)
+
+    try {
+      const res = await fetch('/api/crm/candidate-radius-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyword: radiusKeyword,
+          postcode: radiusPostcode,
+          radius_miles: Number(radiusMiles || 15),
+          status: radiusStatus,
+        }),
+      })
+
+      const json = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        throw new Error(json?.error || 'Could not search candidates.')
+      }
+
+      const rows = Array.isArray(json?.results) ? json.results : []
+
+      setRadiusSearchResults(rows)
+      setSearch('')
+      setRadiusSearchSummary(
+        `${rows.length} candidate${rows.length === 1 ? '' : 's'} found within ${
+          json?.search?.radius_miles || radiusMiles
+        } miles of ${json?.search?.postcode || radiusPostcode}.`,
+      )
+    } catch (error: any) {
+      setRadiusSearchError(error?.message || 'Could not search candidates.')
+    } finally {
+      setRadiusSearching(false)
+    }
+  }
+
+  function clearRadiusSearch() {
+    setRadiusSearchResults(null)
+    setRadiusSearchSummary(null)
+    setRadiusSearchError(null)
+    setRadiusKeyword('')
+    setRadiusPostcode('')
+    setRadiusMiles('15')
+    setRadiusStatus('any')
+  }
+
   const mainRoleOptions = useMemo(() => {
     const fromCandidates = candidates
       .map(c => c.main_role_type)
@@ -262,7 +339,9 @@ const visibleStandardOptions = useMemo(() => {
     return Array.from(new Set(fromCandidates)).sort()
   }, [candidates])
 
-  const filtered = candidates
+    const candidateRows = radiusSearchResults ?? candidates
+
+  const filtered = candidateRows
   .filter(c => {
     const searchTerm = search.toLowerCase().trim()
 
@@ -621,6 +700,153 @@ const visibleStandardOptions = useMemo(() => {
   actively looking
 </p>
         </div>
+
+              <form
+        onSubmit={runRadiusSearch}
+        className="crm-card"
+        style={{
+          padding: 18,
+          marginBottom: 16,
+          border: '1px solid rgba(53,45,235,0.14)',
+          background:
+            'linear-gradient(135deg, rgba(53,45,235,0.06), #ffffff)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 14,
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <p className="crm-card-title">Candidate radius search</p>
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                lineHeight: 1.45,
+              }}
+            >
+              Search by role or keyword within a distance of a postcode.
+            </p>
+          </div>
+
+          {radiusSearchResults && (
+            <button
+              type="button"
+              className="crm-btn-ghost crm-btn-sm"
+              onClick={clearRadiusSearch}
+            >
+              Clear radius search
+            </button>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              'minmax(220px, 1.4fr) minmax(140px, 0.7fr) minmax(120px, 0.5fr) minmax(160px, 0.7fr) auto',
+            gap: 10,
+            alignItems: 'end',
+          }}
+        >
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span className="crm-label">Keyword / role</span>
+            <input
+              className="crm-input"
+              value={radiusKeyword}
+              onChange={event => setRadiusKeyword(event.target.value)}
+              placeholder="Business Development Manager"
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span className="crm-label">Postcode</span>
+            <input
+              className="crm-input"
+              value={radiusPostcode}
+              onChange={event => setRadiusPostcode(event.target.value)}
+              placeholder="DE24 8AA"
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span className="crm-label">Miles</span>
+            <input
+              className="crm-input"
+              type="number"
+              min={1}
+              max={250}
+              value={radiusMiles}
+              onChange={event => setRadiusMiles(event.target.value)}
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span className="crm-label">Status</span>
+            <select
+              className="crm-select"
+              value={radiusStatus}
+              onChange={event => setRadiusStatus(event.target.value)}
+            >
+              <option value="any">Any status</option>
+              <option value="actively_looking">Actively looking</option>
+              <option value="active">Active</option>
+              <option value="passive">Passive</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            className="crm-btn-primary"
+            disabled={radiusSearching}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {radiusSearching ? 'Searching...' : 'Search'}
+          </button>
+        </div>
+
+        {radiusSearchSummary && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 10,
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              color: '#166534',
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            {radiusSearchSummary}
+          </div>
+        )}
+
+        {radiusSearchError && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 10,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#991b1b',
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            {radiusSearchError}
+          </div>
+        )}
+      </form>
 
         <button className="crm-btn-primary" onClick={() => setShowForm(true)}>
           + Add Candidate
