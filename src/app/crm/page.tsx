@@ -108,6 +108,17 @@ function isInterviewPast(value?: string | null) {
   return date.getTime() < Date.now()
 }
 
+function hasClientInterviewFeedback(interview: any) {
+  const application = interview?.application || interview?.applications || null
+
+  return Boolean(
+    String(interview?.feedback || '').trim() ||
+      String(interview?.outcome || '').trim() ||
+      String(application?.client_interview_feedback || '').trim() ||
+      String(application?.client_interview_outcome || '').trim(),
+  )
+}
+
 function getInterviewType(interview: any) {
   return (
     interview.interview_type ||
@@ -313,6 +324,10 @@ export default async function CrmDashboard({
         updated_at,
         vacancy_id,
         candidate_id,
+        client_interview_date,
+        client_interview_time,
+        client_interview_feedback,
+        client_interview_outcome,
         candidates (
           id,
           first_name,
@@ -343,6 +358,8 @@ export default async function CrmDashboard({
         applications (
           id,
           status,
+          client_interview_feedback,
+          client_interview_outcome,
           candidates (
             id,
             first_name,
@@ -663,7 +680,9 @@ export default async function CrmDashboard({
       return {
         id: `application-${app.id}`,
         source: 'application_status',
-        interviewDate: app.updated_at || app.created_at,
+        interviewDate: app.client_interview_date
+          ? `${app.client_interview_date}T${app.client_interview_time || '00:00'}`
+          : app.updated_at || app.created_at,
         interviewType: 'Employer interview',
         interviewLocation: '',
         application: app,
@@ -677,6 +696,13 @@ export default async function CrmDashboard({
     ...interviewsFromInterviewTable,
     ...interviewsFromApplicationStatus,
   ]
+    .filter((interview: any) => {
+      const interviewDate = interview.interviewDate
+      const isPast = isInterviewPast(interviewDate)
+      const hasFeedback = hasClientInterviewFeedback(interview)
+
+      return !(isPast && hasFeedback)
+    })
     .filter((interview: any, index, self) => {
       const applicationId = interview.application?.id
       if (!applicationId) return false
