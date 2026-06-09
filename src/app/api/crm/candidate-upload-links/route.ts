@@ -32,6 +32,17 @@ const documentLabels: Record<string, string> = {
   other: 'Other document',
 }
 
+type RoleEmailContext = {
+  applicationId: string | null
+  roleTitle: string
+  employerName: string
+  location: string
+  salary: string
+  employerWebsite: string
+  employerWebsiteUrl: string
+  jobDescription: string
+}
+
 function getSiteUrl() {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -40,8 +51,29 @@ function getSiteUrl() {
   ).replace(/\/$/, '')
 }
 
+function clean(value: unknown) {
+  return String(value ?? '').trim()
+}
+
 function candidateName(candidate: any) {
   return `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim()
+}
+
+function firstNonBlank(...values: unknown[]) {
+  return values.map(clean).find(Boolean) || ''
+}
+
+function relationOne(value: any) {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null
+}
+
+function normaliseWebsiteUrl(value: unknown) {
+  const website = clean(value)
+
+  if (!website) return ''
+  if (/^https?:\/\//i.test(website)) return website
+
+  return `https://${website}`
 }
 
 function escapeHtml(value: unknown) {
@@ -53,28 +85,87 @@ function escapeHtml(value: unknown) {
     .replaceAll("'", '&#039;')
 }
 
+function multilineHtml(value: unknown) {
+  return escapeHtml(value).replace(/\n/g, '<br />')
+}
+
+function buildRoleEmailContext(application: any): RoleEmailContext | null {
+  if (!application) return null
+
+  const vacancy = relationOne(application.vacancies)
+  const client = relationOne(vacancy?.clients)
+
+  if (!vacancy) return null
+
+  const employerWebsite = clean(client?.website)
+  const jobDescription = firstNonBlank(
+    vacancy?.employer_job_description,
+    vacancy?.description,
+    vacancy?.anonymous_description,
+    vacancy?.briefing_notes,
+  )
+
+  return {
+    applicationId: clean(application.id) || null,
+    roleTitle: firstNonBlank(vacancy?.title, 'Opportunity'),
+    employerName: clean(client?.company_name),
+    location: firstNonBlank(vacancy?.location, vacancy?.region),
+    salary: clean(vacancy?.salary_display),
+    employerWebsite,
+    employerWebsiteUrl: normaliseWebsiteUrl(employerWebsite),
+    jobDescription,
+  }
+}
+
 function buildCandidatePortalEmail({
   firstName,
   uploadUrl,
   requestedDocumentTypes,
   message,
+  roleContext,
 }: {
   firstName: string
   uploadUrl: string
   requestedDocumentTypes: string[]
   message: string | null
+  roleContext?: RoleEmailContext | null
 }) {
   const requestedLabels = requestedDocumentTypes
     .map(type => documentLabels[type] || type)
     .filter(Boolean)
 
-  const subject =
-    'Educated Appointments - Secure Document Upload & Privacy Confirmation'
+  const subject = roleContext?.roleTitle
+    ? `Educated Appointments - ${roleContext.roleTitle} information & secure candidate portal`
+    : 'Educated Appointments - Secure Document Upload & Privacy Confirmation'
+
+  const roleText = roleContext
+    ? [
+        'Further to our conversation, please find the details for the opportunity we discussed below.',
+        '',
+        `Role: ${roleContext.roleTitle || 'Not specified'}`,
+        roleContext.employerName
+          ? `Employer: ${roleContext.employerName}`
+          : '',
+        roleContext.location ? `Location: ${roleContext.location}` : '',
+        roleContext.salary ? `Salary: ${roleContext.salary}` : '',
+        roleContext.employerWebsite
+          ? `Employer website: ${roleContext.employerWebsiteUrl || roleContext.employerWebsite}`
+          : '',
+        '',
+        'Role information:',
+        '',
+        roleContext.jobDescription || 'Role information to follow.',
+        '',
+        'Please also use the secure link below to upload the documents we need for your recruitment file:',
+      ].filter(Boolean)
+    : [
+        'Please use the secure link below to upload the documents we need for your recruitment file:',
+      ]
 
   const text = [
     `Hi ${firstName || 'there'},`,
     '',
-    'Please use the secure link below to upload the documents we need for your recruitment file:',
+    ...roleText,
     '',
     uploadUrl,
     '',
@@ -107,11 +198,56 @@ function buildCandidatePortalEmail({
     ? `<p>${escapeHtml(message).replace(/\n/g, '<br />')}</p>`
     : ''
 
+  const roleHtml = roleContext
+    ? `
+      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:18px 0;">
+        <p style="margin:0 0 10px 0;"><strong>Role:</strong> ${escapeHtml(roleContext.roleTitle || 'Not specified')}</p>
+        ${
+          roleContext.employerName
+            ? `<p style="margin:0 0 10px 0;"><strong>Employer:</strong> ${escapeHtml(roleContext.employerName)}</p>`
+            : ''
+        }
+        ${
+          roleContext.location
+            ? `<p style="margin:0 0 10px 0;"><strong>Location:</strong> ${escapeHtml(roleContext.location)}</p>`
+            : ''
+        }
+        ${
+          roleContext.salary
+            ? `<p style="margin:0 0 10px 0;"><strong>Salary:</strong> ${escapeHtml(roleContext.salary)}</p>`
+            : ''
+        }
+        ${
+          roleContext.employerWebsite
+            ? `<p style="margin:0 0 10px 0;"><strong>Employer website:</strong> <a href="${escapeHtml(roleContext.employerWebsiteUrl)}">${escapeHtml(roleContext.employerWebsite)}</a></p>`
+            : ''
+        }
+
+        <p style="margin:16px 0 8px 0;"><strong>Role information:</strong></p>
+        <div style="white-space:normal;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;">
+          ${multilineHtml(roleContext.jobDescription || 'Role information to follow.')}
+        </div>
+      </div>
+    `
+    : ''
+
+  const introHtml = roleContext
+    ? `<p>Further to our conversation, please find the details for the opportunity we discussed below.</p>`
+    : `<p>Please use the secure link below to upload the documents we need for your recruitment file:</p>`
+
+  const portalIntroHtml = roleContext
+    ? `<p>Please also use the secure link below to upload the documents we need for your recruitment file:</p>`
+    : ''
+
   const html = `
     <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#111827;">
       <p>Hi ${escapeHtml(firstName || 'there')},</p>
 
-      <p>Please use the secure link below to upload the documents we need for your recruitment file:</p>
+      ${introHtml}
+
+      ${roleHtml}
+
+      ${portalIntroHtml}
 
       <p>
         <a href="${escapeHtml(uploadUrl)}" style="display:inline-block;background:#352DEB;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;">
@@ -149,16 +285,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const supabase = getServiceClient()
 
-    const candidateId = String(body.candidate_id || '').trim()
-    const message = String(body.message || '').trim() || null
+    const candidateId = clean(body.candidate_id)
+    const applicationId = clean(body.application_id || body.applicationId)
+    const message = clean(body.message) || null
 
     const requestedDocumentTypes: string[] = Array.isArray(
-  body.requested_document_types,
-)
-  ? body.requested_document_types
-      .map((item: unknown) => String(item || '').trim())
-      .filter((item: string) => allowedDocumentTypes.includes(item))
-  : []
+      body.requested_document_types,
+    )
+      ? body.requested_document_types
+          .map((item: unknown) => String(item || '').trim())
+          .filter((item: string) => allowedDocumentTypes.includes(item))
+      : []
 
     if (!candidateId) {
       return NextResponse.json(
@@ -197,6 +334,73 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let roleContext: RoleEmailContext | null = null
+
+    if (applicationId) {
+      const { data: application, error: applicationError } = await supabase
+        .from('applications')
+        .select(`
+          id,
+          candidate_id,
+          vacancy_id,
+          candidates (
+            id,
+            first_name,
+            last_name,
+            email
+          ),
+          vacancies (
+            id,
+            title,
+            location,
+            region,
+            salary_display,
+            description,
+            employer_job_description,
+            anonymous_description,
+            briefing_notes,
+            clients (
+              id,
+              company_name,
+              website
+            )
+          )
+        `)
+        .eq('id', applicationId)
+        .maybeSingle()
+
+      if (applicationError) {
+        return NextResponse.json(
+          { error: applicationError.message },
+          { status: 400 },
+        )
+      }
+
+      if (!application) {
+        return NextResponse.json(
+          { error: 'Application not found.' },
+          { status: 404 },
+        )
+      }
+
+      const applicationCandidate = relationOne((application as any).candidates)
+      const applicationCandidateId = clean(
+        (application as any).candidate_id || applicationCandidate?.id,
+      )
+
+      if (applicationCandidateId && applicationCandidateId !== candidateId) {
+        return NextResponse.json(
+          {
+            error:
+              'This application is not linked to the selected candidate.',
+          },
+          { status: 400 },
+        )
+      }
+
+      roleContext = buildRoleEmailContext(application)
+    }
+
     const { data: uploadLink, error } = await supabase
       .from('candidate_upload_links')
       .insert({
@@ -220,6 +424,7 @@ export async function POST(request: NextRequest) {
       uploadUrl,
       requestedDocumentTypes,
       message,
+      roleContext,
     })
 
     await sendEmail({
@@ -246,15 +451,25 @@ export async function POST(request: NextRequest) {
       candidate_id: candidate.id,
       activity_type: 'email',
       content: [
-        'Candidate portal link sent.',
+        roleContext
+          ? 'Role-specific candidate portal link sent.'
+          : 'Candidate portal link sent.',
         `Email: ${candidate.email}`,
+        roleContext?.roleTitle ? `Role: ${roleContext.roleTitle}` : null,
+        roleContext?.employerName ? `Employer: ${roleContext.employerName}` : null,
+        roleContext?.employerWebsite
+          ? `Employer website: ${roleContext.employerWebsiteUrl || roleContext.employerWebsite}`
+          : null,
+        applicationId ? `Application ID: ${applicationId}` : null,
         `Portal link: ${uploadUrl}`,
         requestedDocumentTypes.length > 0
           ? `Requested documents: ${requestedDocumentTypes
               .map((type: string) => documentLabels[type] || type)
               .join(', ')}`
           : 'Requested documents: Any relevant documents',
-      ].join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     })
 
     return NextResponse.json({
@@ -262,7 +477,10 @@ export async function POST(request: NextRequest) {
       uploadUrl,
       candidate,
       sent: true,
-      message: `Candidate portal link sent to ${candidate.email}.`,
+      roleContext,
+      message: roleContext
+        ? `Role-specific candidate portal email sent to ${candidate.email}.`
+        : `Candidate portal link sent to ${candidate.email}.`,
     })
   } catch (error: any) {
     console.error('Create candidate upload link error:', error)

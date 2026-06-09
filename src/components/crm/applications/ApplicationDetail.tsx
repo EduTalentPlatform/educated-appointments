@@ -647,10 +647,84 @@ const [
   setSelectedClientInterviewTemplateId,
 ] = useState('')
 const [clientEmailSubject, setClientEmailSubject] = useState('')
+const [sendingRolePortalEmail, setSendingRolePortalEmail] = useState(false)
+const [rolePortalEmailMessage, setRolePortalEmailMessage] = useState<string | null>(null)
+const [rolePortalEmailError, setRolePortalEmailError] = useState<string | null>(null)
 
   const c = app.candidates
   const v = app.vacancies
   const client = Array.isArray(v?.clients) ? v?.clients?.[0] : v?.clients
+
+  async function sendRoleCandidatePortalEmail() {
+  if (!c?.id) {
+    setRolePortalEmailError('This application does not have a candidate linked.')
+    return
+  }
+
+  if (!c?.email) {
+    setRolePortalEmailError(
+      'The candidate needs an email address before sending the portal link.',
+    )
+    return
+  }
+
+  setSendingRolePortalEmail(true)
+  setRolePortalEmailMessage(null)
+  setRolePortalEmailError(null)
+
+  try {
+    const res = await fetch('/api/crm/candidate-upload-links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: c.id,
+        application_id: app.id,
+        requested_document_types: [
+          'cv',
+          'qualification',
+          'right_to_work',
+          'dbs',
+          'reference',
+        ],
+        message: `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
+      }),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      throw new Error(json?.error || 'Could not send the candidate portal email.')
+    }
+
+    setRolePortalEmailMessage(
+      json?.message || `Candidate portal email sent to ${c.email}.`,
+    )
+
+    setActivityItems(current => [
+      {
+        id: `local-role-portal-${Date.now()}`,
+        activity_type: 'email',
+        content: [
+          'Role-specific candidate portal email sent.',
+          `Email: ${c.email}`,
+          v?.title ? `Role: ${v.title}` : null,
+          client?.company_name ? `Employer: ${client.company_name}` : null,
+          json?.uploadUrl ? `Portal link: ${json.uploadUrl}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        created_at: new Date().toISOString(),
+      },
+      ...current,
+    ])
+  } catch (error: any) {
+    setRolePortalEmailError(
+      error?.message || 'Could not send the candidate portal email.',
+    )
+  } finally {
+    setSendingRolePortalEmail(false)
+  }
+}
 
   const [candidateFactsForm, setCandidateFactsForm] =
   useState<CandidateFactsForm>(() => candidateToFactsForm(c))
@@ -1955,15 +2029,42 @@ Kind regards,`
           </div>
         </div>
 
-        {app.status === 'ready_to_present' && (
-          <button
-            className="crm-btn-primary"
-            style={{ background: '#217822' }}
-            onClick={() => patchApp({ status: 'presented' })}
-          >
-            Present to client →
-          </button>
-        )}
+                <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+          }}
+        >
+          {c?.id && (
+            <button
+              type="button"
+              className="crm-btn-secondary"
+              onClick={sendRoleCandidatePortalEmail}
+              disabled={sendingRolePortalEmail}
+              title={
+                c?.email
+                  ? 'Send role information and secure candidate portal link'
+                  : 'Candidate needs an email address first'
+              }
+            >
+              {sendingRolePortalEmail
+                ? 'Sending portal email...'
+                : 'Send role portal email'}
+            </button>
+          )}
+
+          {app.status === 'ready_to_present' && (
+            <button
+              className="crm-btn-primary"
+              style={{ background: '#217822' }}
+              onClick={() => patchApp({ status: 'presented' })}
+            >
+              Present to client →
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="crm-tabs">
