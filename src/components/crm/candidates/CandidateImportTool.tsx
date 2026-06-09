@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
+import { ALL_STANDARDS, MAIN_ROLE_TYPES, ROLE_TYPE_HIERARCHY } from '@/lib/crm-data'
 
 type ImportRow = {
   rowNumber: number
@@ -44,6 +45,55 @@ const EMPTY_MAPPING: MappingState = {
 
 function clean(value: unknown) {
   return String(value ?? '').trim()
+}
+
+function splitCommaList(value: string) {
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function joinCommaList(values: string[]) {
+  return Array.from(new Set(values.map(item => item.trim()).filter(Boolean))).join(', ')
+}
+
+function toggleCommaValue(current: string, value: string) {
+  const cleanValue = value.trim()
+  if (!cleanValue) return current
+
+  const values = splitCommaList(current)
+  const exists = values.some(item => item.toLowerCase() === cleanValue.toLowerCase())
+
+  return exists
+    ? joinCommaList(values.filter(item => item.toLowerCase() !== cleanValue.toLowerCase()))
+    : joinCommaList([...values, cleanValue])
+}
+
+function getStandardName(standard: any) {
+  return String(
+    standard?.name ||
+      standard?.title ||
+      standard?.label ||
+      standard?.standard_name ||
+      '',
+  ).trim()
+}
+
+function getStandardRef(standard: any) {
+  return String(standard?.ref || standard?.reference || standard?.code || '').trim()
+}
+
+function getStandardSearchText(standard: any) {
+  return [
+    getStandardName(standard),
+    getStandardRef(standard),
+    standard?.route,
+    standard?.sector,
+    standard?.level,
+  ]
+    .map(item => String(item || '').toLowerCase())
+    .join(' ')
 }
 
 function splitName(fullName: string) {
@@ -200,11 +250,33 @@ export default function CandidateImportTool() {
   const [skipNoPostcode, setSkipNoPostcode] = useState(true)
   const [skipNoPhone, setSkipNoPhone] = useState(false)
   const [skipNoEmail, setSkipNoEmail] = useState(false)
+  const [standardSearch, setStandardSearch] = useState('')
   const [importing, setImporting] = useState(false)
   const [importSummary, setImportSummary] = useState<string | null>(null)
 
   const selectedRows = rows.filter(row => row.selected)
   const importableRows = selectedRows.filter(row => !row.error && !row.imported)
+
+  const selectedSpecificRoles = splitCommaList(defaults.specific_roles)
+const selectedStandards = splitCommaList(defaults.can_deliver)
+
+const specificRoleOptions = useMemo(() => {
+  const hierarchyOptions =
+    ROLE_TYPE_HIERARCHY[defaults.main_role_type]?.subTypes ?? []
+
+  return Array.from(
+    new Set([...hierarchyOptions, ...selectedSpecificRoles].filter(Boolean)),
+  ).sort()
+}, [defaults.main_role_type, selectedSpecificRoles])
+
+const filteredStandardOptions = useMemo(() => {
+  const term = standardSearch.toLowerCase().trim()
+
+  return ALL_STANDARDS.filter(standard => {
+    if (!term) return true
+    return getStandardSearchText(standard).includes(term)
+  }).slice(0, 25)
+}, [standardSearch])
 
   const previewRows = useMemo(() => {
     return rows.map(row => {
@@ -487,49 +559,156 @@ export default function CandidateImportTool() {
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
-                <span className="crm-label">Main role type</span>
-                <input
-                  className="crm-input"
-                  value={defaults.main_role_type}
-                  onChange={event =>
-                    setDefaults(current => ({
-                      ...current,
-                      main_role_type: event.target.value,
-                    }))
-                  }
-                  placeholder="Delivery"
-                />
-              </label>
+  <span className="crm-label">Main role type</span>
+  <select
+    className="crm-select"
+    value={defaults.main_role_type}
+    onChange={event =>
+      setDefaults(current => ({
+        ...current,
+        main_role_type: event.target.value,
+        specific_roles: '',
+      }))
+    }
+  >
+    <option value="">Select main role type...</option>
+    {MAIN_ROLE_TYPES.map(role => (
+      <option key={role} value={role}>
+        {role}
+      </option>
+    ))}
+  </select>
+</label>
 
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span className="crm-label">Specific roles</span>
-                <input
-                  className="crm-input"
-                  value={defaults.specific_roles}
-                  onChange={event =>
-                    setDefaults(current => ({
-                      ...current,
-                      specific_roles: event.target.value,
-                    }))
-                  }
-                  placeholder="Assessor, Skills Coach, Tutor/Trainer"
-                />
-              </label>
+              <div style={{ display: 'grid', gap: 6 }}>
+  <span className="crm-label">Specific roles</span>
 
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span className="crm-label">Standards / can deliver</span>
-                <input
-                  className="crm-input"
-                  value={defaults.can_deliver}
-                  onChange={event =>
-                    setDefaults(current => ({
-                      ...current,
-                      can_deliver: event.target.value,
-                    }))
-                  }
-                  placeholder="Accountancy or Taxation Professional"
-                />
-              </label>
+  {!defaults.main_role_type ? (
+    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+      Select a main role type first.
+    </p>
+  ) : (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {specificRoleOptions.map(role => {
+          const selected = selectedSpecificRoles.some(
+            item => item.toLowerCase() === role.toLowerCase(),
+          )
+
+          return (
+            <button
+              key={role}
+              type="button"
+              className={`crm-status-filter${selected ? ' active' : ''}`}
+              onClick={() =>
+                setDefaults(current => ({
+                  ...current,
+                  specific_roles: toggleCommaValue(current.specific_roles, role),
+                }))
+              }
+              style={{ fontSize: 11 }}
+            >
+              {role}
+            </button>
+          )
+        })}
+      </div>
+
+      {selectedSpecificRoles.length > 0 && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
+          Selected: {selectedSpecificRoles.join(', ')}
+        </p>
+      )}
+    </>
+  )}
+</div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+  <span className="crm-label">Standards / can deliver</span>
+
+  <input
+    className="crm-input"
+    value={standardSearch}
+    onChange={event => setStandardSearch(event.target.value)}
+    placeholder="Search standards, e.g. Accountancy, Adult Care, Electrical..."
+  />
+
+  {selectedStandards.length > 0 && (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {selectedStandards.map(standard => (
+        <button
+          key={standard}
+          type="button"
+          className="crm-badge crm-badge-blue"
+          onClick={() =>
+            setDefaults(current => ({
+              ...current,
+              can_deliver: toggleCommaValue(current.can_deliver, standard),
+            }))
+          }
+          style={{ cursor: 'pointer' }}
+          title="Click to remove"
+        >
+          {standard} ×
+        </button>
+      ))}
+    </div>
+  )}
+
+  <div
+    style={{
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: 6,
+      maxHeight: 160,
+      overflowY: 'auto',
+      padding: 8,
+      border: '1px solid var(--border-light)',
+      borderRadius: 10,
+      background: 'var(--light-bg)',
+    }}
+  >
+    {filteredStandardOptions.map(standard => {
+      const standardName = getStandardName(standard)
+      const standardRef = getStandardRef(standard)
+
+      if (!standardName) return null
+
+      const selected = selectedStandards.some(
+        item => item.toLowerCase() === standardName.toLowerCase(),
+      )
+
+      return (
+        <button
+          key={`${standardName}-${standardRef}`}
+          type="button"
+          className={`crm-status-filter${selected ? ' active' : ''}`}
+          onClick={() =>
+            setDefaults(current => ({
+              ...current,
+              can_deliver: toggleCommaValue(current.can_deliver, standardName),
+            }))
+          }
+          style={{
+            fontSize: 11,
+            textAlign: 'left',
+            whiteSpace: 'normal',
+          }}
+        >
+          {standardName}
+          {standardRef ? ` (${standardRef})` : ''}
+          {standard?.level ? ` · Level ${standard.level}` : ''}
+        </button>
+      )
+    })}
+
+    {filteredStandardOptions.length === 0 && (
+      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        No matching standards found.
+      </span>
+    )}
+  </div>
+</div>
 
               <label style={{ display: 'grid', gap: 6 }}>
                 <span className="crm-label">Work type</span>
