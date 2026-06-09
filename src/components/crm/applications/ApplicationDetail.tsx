@@ -239,6 +239,16 @@ const CANDIDATE_FACT_FIELDS: CandidateFactField[] = [
   },
 ]
 
+const APPLICATION_PORTAL_DOCUMENT_TYPES = [
+  { value: 'cv', label: 'CV' },
+  { value: 'qualification', label: 'Certificates / qualifications' },
+  { value: 'right_to_work', label: 'Right to work' },
+  { value: 'dbs', label: 'DBS' },
+  { value: 'reference', label: 'References' },
+  { value: 'interview_prep', label: 'Interview prep' },
+  { value: 'other', label: 'Other documents' },
+]
+
 function isBlankCandidateValue(value: unknown) {
   if (value === null || value === undefined) return true
   if (Array.isArray(value)) return value.length === 0
@@ -650,10 +660,27 @@ const [clientEmailSubject, setClientEmailSubject] = useState('')
 const [sendingRolePortalEmail, setSendingRolePortalEmail] = useState(false)
 const [rolePortalEmailMessage, setRolePortalEmailMessage] = useState<string | null>(null)
 const [rolePortalEmailError, setRolePortalEmailError] = useState<string | null>(null)
+const [rolePortalRequestOpen, setRolePortalRequestOpen] = useState(false)
+const [rolePortalRequestedDocuments, setRolePortalRequestedDocuments] = useState<string[]>([
+  'cv',
+  'qualification',
+  'right_to_work',
+  'dbs',
+  'reference',
+])
+const [rolePortalMessage, setRolePortalMessage] = useState('')
 
   const c = app.candidates
   const v = app.vacancies
   const client = Array.isArray(v?.clients) ? v?.clients?.[0] : v?.clients
+
+    function toggleRolePortalRequestedDocument(type: string) {
+    setRolePortalRequestedDocuments(current =>
+      current.includes(type)
+        ? current.filter(item => item !== type)
+        : [...current, type],
+    )
+  }
 
   async function sendRoleCandidatePortalEmail() {
   if (!c?.id) {
@@ -668,6 +695,11 @@ const [rolePortalEmailError, setRolePortalEmailError] = useState<string | null>(
     return
   }
 
+  if (rolePortalRequestedDocuments.length === 0) {
+    setRolePortalEmailError('Please select at least one document to request.')
+    return
+  }
+
   setSendingRolePortalEmail(true)
   setRolePortalEmailMessage(null)
   setRolePortalEmailError(null)
@@ -679,14 +711,10 @@ const [rolePortalEmailError, setRolePortalEmailError] = useState<string | null>(
       body: JSON.stringify({
         candidate_id: c.id,
         application_id: app.id,
-        requested_document_types: [
-          'cv',
-          'qualification',
-          'right_to_work',
-          'dbs',
-          'reference',
-        ],
-        message: `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
+        requested_document_types: rolePortalRequestedDocuments,
+        message:
+          rolePortalMessage.trim() ||
+          `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
       }),
     })
 
@@ -2029,7 +2057,7 @@ Kind regards,`
           </div>
         </div>
 
-                <div
+                        <div
           style={{
             display: 'flex',
             gap: 10,
@@ -2037,24 +2065,6 @@ Kind regards,`
             justifyContent: 'flex-end',
           }}
         >
-          {c?.id && (
-            <button
-              type="button"
-              className="crm-btn-secondary"
-              onClick={sendRoleCandidatePortalEmail}
-              disabled={sendingRolePortalEmail}
-              title={
-                c?.email
-                  ? 'Send role information and secure candidate portal link'
-                  : 'Candidate needs an email address first'
-              }
-            >
-              {sendingRolePortalEmail
-                ? 'Sending portal email...'
-                : 'Send role portal email'}
-            </button>
-          )}
-
           {app.status === 'ready_to_present' && (
             <button
               className="crm-btn-primary"
@@ -2067,6 +2077,196 @@ Kind regards,`
         </div>
       </div>
 
+                  <div
+        style={{
+          marginBottom: 14,
+          padding: 14,
+          borderRadius: 16,
+          border: '1px solid var(--border-light)',
+          background: '#ffffff',
+          boxShadow: '0 10px 30px rgba(15,23,42,0.04)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 13,
+                fontWeight: 900,
+                color: 'var(--text-main)',
+              }}
+            >
+              Candidate portal request
+            </p>
+            <p
+              style={{
+                margin: '4px 0 0',
+                fontSize: 12,
+                color: 'var(--text-muted)',
+              }}
+            >
+              Send the candidate the role details, employer website, job description and a secure upload link.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="crm-btn-secondary"
+            onClick={() => setRolePortalRequestOpen(open => !open)}
+          >
+            {rolePortalRequestOpen
+              ? 'Hide request options'
+              : 'Choose documents to request'}
+          </button>
+        </div>
+
+        {rolePortalRequestOpen && (
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 14,
+              borderTop: '1px solid var(--border-light)',
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: 10,
+              }}
+            >
+              {APPLICATION_PORTAL_DOCUMENT_TYPES.map(type => (
+                <label
+                  key={type.value}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid var(--border-light)',
+                    background: rolePortalRequestedDocuments.includes(type.value)
+                      ? '#f3f0ff'
+                      : '#f9fafb',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={rolePortalRequestedDocuments.includes(type.value)}
+                    onChange={() =>
+                      toggleRolePortalRequestedDocument(type.value)
+                    }
+                  />
+                  {type.label}
+                </label>
+              ))}
+            </div>
+
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Optional message to candidate
+              </span>
+              <textarea
+                rows={3}
+                className="crm-textarea"
+                value={rolePortalMessage}
+                onChange={event => setRolePortalMessage(event.target.value)}
+                placeholder={`Please upload the requested documents for the ${v?.title || 'role'} opportunity.`}
+              />
+            </label>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 12,
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Selected: {rolePortalRequestedDocuments.length || 0} document type
+                {rolePortalRequestedDocuments.length === 1 ? '' : 's'}
+              </p>
+
+              <button
+                type="button"
+                className="crm-btn-primary"
+                onClick={sendRoleCandidatePortalEmail}
+                disabled={
+                  sendingRolePortalEmail ||
+                  rolePortalRequestedDocuments.length === 0
+                }
+              >
+                {sendingRolePortalEmail
+                  ? 'Sending...'
+                  : 'Send role portal email'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+            
+            {rolePortalEmailMessage && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid #bbf7d0',
+            background: '#f0fdf4',
+            color: '#166534',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {rolePortalEmailMessage}
+        </div>
+      )}
+
+      {rolePortalEmailError && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid #fecaca',
+            background: '#fef2f2',
+            color: '#991b1b',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          {rolePortalEmailError}
+        </div>
+      )}
+      
       <div className="crm-tabs">
   {[
     { id: 'overview', label: '◈ Overview' },
