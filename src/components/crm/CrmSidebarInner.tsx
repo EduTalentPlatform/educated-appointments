@@ -47,6 +47,7 @@ const nav = [
     label: 'Admin',
     items: [
       { href: '/crm/email-templates', label: 'Email Templates', icon: '✉' },
+      { href: '/crm/role-settings', label: 'Role Settings', icon: '▦' },
       { href: '/crm/portal-users', label: 'Portal Users', icon: '◉' },
     ],
   },
