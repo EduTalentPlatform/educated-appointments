@@ -114,13 +114,14 @@ ${safeText(JSON.stringify(client, null, 2), 4000)}
 `
 
     const { text, provider, model } = await callAI(prompt, {
-      maxTokens: 1200,
-      temperature: 0.35,
-      taskType: 'linkedin',
-      autoContinue: false,
-      system:
-        'You are a UK recruitment consultant at Educated Appointments writing LinkedIn candidate outreach messages. Write in British English. Sound human, direct, warm and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Keep the employer anonymous. Do not invent facts.',
-    })
+  maxTokens: 1200,
+  temperature: 0.35,
+  taskType: 'linkedin',
+  route: 'crm/vacancy-linkedin-outreach',
+  autoContinue: false,
+  system:
+    'You are a UK recruitment consultant at Educated Appointments writing LinkedIn candidate outreach messages. Write in British English. Sound human, direct, warm and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Keep the employer anonymous. Do not invent facts.',
+})
 
     return NextResponse.json({ message: text, provider, model })
   } catch (error: any) {

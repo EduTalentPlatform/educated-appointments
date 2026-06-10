@@ -32,10 +32,11 @@ Guidelines:
 Write only the email body.`
 
     const { text, provider, model } = await callAI(prompt, {
-      maxTokens: 1000,
-      temperature: 0.5,
-      taskType: 'email',
-    })
+  maxTokens: 1000,
+  temperature: 0.5,
+  taskType: 'email',
+  route: 'crm/ai-email',
+})
 
     return NextResponse.json({ result: text, provider, model })
   } catch (err: any) {

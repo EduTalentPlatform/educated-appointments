@@ -28,6 +28,9 @@ type AIOptions = {
   taskType?: AITaskType
   model?: string
   cachePrompt?: boolean
+  route?: string
+  metadata?: Record<string, any>
+  logUsage?: boolean
 }
 
 type AIUsage = {
@@ -209,9 +212,10 @@ type RequiredResolvedOptions = Required<
     | 'maxContinuations'
     | 'taskType'
     | 'cachePrompt'
+    | 'logUsage'
   >
 > &
-  Pick<AIOptions, 'provider' | 'model'>
+  Pick<AIOptions, 'provider' | 'model' | 'route' | 'metadata'>
 
 async function callAnthropic(
   prompt: string,
@@ -424,6 +428,70 @@ async function callProvider(
   return callAnthropic(prompt, options)
 }
 
+function getSupabaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    ''
+  ).replace(/\/$/, '')
+}
+
+function getSupabaseServiceRoleKey() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+}
+
+async function logAIUsage(payload: {
+  route?: string
+  taskType?: string
+  provider: AIProvider
+  model?: string
+  finishReason?: string
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  maxTokens?: number
+  temperature?: number
+  success: boolean
+  errorMessage?: string
+  metadata?: Record<string, any>
+}) {
+  const supabaseUrl = getSupabaseUrl()
+  const serviceRoleKey = getSupabaseServiceRoleKey()
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return
+  }
+
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/ai_usage_logs`, {
+      method: 'POST',
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        route: payload.route || null,
+        task_type: payload.taskType || null,
+        provider: payload.provider,
+        model: payload.model || null,
+        finish_reason: payload.finishReason || null,
+        input_tokens: payload.inputTokens ?? null,
+        output_tokens: payload.outputTokens ?? null,
+        total_tokens: payload.totalTokens ?? null,
+        max_tokens: payload.maxTokens ?? null,
+        temperature: payload.temperature ?? null,
+        success: payload.success,
+        error_message: payload.errorMessage || null,
+        metadata: payload.metadata || {},
+      }),
+    })
+  } catch (error) {
+    console.error('AI usage logging failed:', error)
+  }
+}
+
 export async function callAI(
   prompt: string,
   options: AIOptions = {},
@@ -439,49 +507,104 @@ export async function callAI(
     taskType: options.taskType ?? 'default',
     model: options.model,
     cachePrompt: options.cachePrompt ?? false,
+    route: options.route,
+    metadata: options.metadata,
+    logUsage: options.logUsage ?? true,
   }
 
-  let result = await callProvider(prompt, resolvedOptions)
+  let selectedProvider: AIProvider | undefined
+  let selectedModel: string | undefined
 
-  if (!result.text) {
-    throw new Error(`${result.provider} returned empty text`)
-  }
+  try {
+    const firstProvider = resolveProvider(resolvedOptions)
+    selectedProvider = firstProvider
+    selectedModel =
+      firstProvider === 'openai'
+        ? resolveOpenAIModel(resolvedOptions)
+        : resolvedOptions.model || DEFAULT_ANTHROPIC_MODEL
 
-  let finalText = result.text
-  let finishReason = result.finishReason
-  let continuations = 0
-  const provider = result.provider
-  const model = result.model
-  const usage = result.usage
+    let result = await callProvider(prompt, resolvedOptions)
 
-  while (
-    resolvedOptions.autoContinue &&
-    isTokenLimitFinishReason(finishReason) &&
-    continuations < resolvedOptions.maxContinuations
-  ) {
-    continuations++
+    if (!result.text) {
+      throw new Error(`${result.provider} returned empty text`)
+    }
 
-    const continued = await callProvider(
-      buildContinuationPrompt(prompt, finalText),
-      {
-        ...resolvedOptions,
+    let finalText = result.text
+    let finishReason = result.finishReason
+    let continuations = 0
+    const provider = result.provider
+    const model = result.model
+    const usage = result.usage
+
+    while (
+      resolvedOptions.autoContinue &&
+      isTokenLimitFinishReason(finishReason) &&
+      continuations < resolvedOptions.maxContinuations
+    ) {
+      continuations++
+
+      const continued = await callProvider(
+        buildContinuationPrompt(prompt, finalText),
+        {
+          ...resolvedOptions,
+          provider,
+          model,
+        },
+      )
+
+      if (!continued.text) break
+
+      finalText = cleanText(`${finalText}\n\n${continued.text}`)
+      finishReason = continued.finishReason
+    }
+
+    if (resolvedOptions.logUsage) {
+      await logAIUsage({
+        route: resolvedOptions.route,
+        taskType: resolvedOptions.taskType,
         provider,
         model,
-      },
-    )
+        finishReason,
+        inputTokens: usage?.inputTokens,
+        outputTokens: usage?.outputTokens,
+        totalTokens: usage?.totalTokens,
+        maxTokens: resolvedOptions.maxTokens,
+        temperature: resolvedOptions.temperature,
+        success: true,
+        metadata: {
+          ...(resolvedOptions.metadata || {}),
+          continuations,
+          use_web_search: resolvedOptions.useWebSearch,
+        },
+      })
+    }
 
-    if (!continued.text) break
+    return {
+      text: finalText,
+      provider,
+      model,
+      finishReason,
+      usage,
+    }
+  } catch (error: any) {
+    if (resolvedOptions.logUsage) {
+      await logAIUsage({
+        route: resolvedOptions.route,
+        taskType: resolvedOptions.taskType,
+        provider: selectedProvider || resolvedOptions.provider || 'anthropic',
+        model: selectedModel || resolvedOptions.model,
+        maxTokens: resolvedOptions.maxTokens,
+        temperature: resolvedOptions.temperature,
+        success: false,
+        errorMessage: error?.message || 'AI request failed.',
+        metadata: {
+          ...(resolvedOptions.metadata || {}),
+          use_web_search: resolvedOptions.useWebSearch,
+        },
+      })
+    }
 
-    finalText = cleanText(`${finalText}\n\n${continued.text}`)
-    finishReason = continued.finishReason
-  }
-
-  return {
-    text: finalText,
-    provider,
-    model,
-    finishReason,
-    usage,
+    throw error
   }
 }
 
