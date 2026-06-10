@@ -15,6 +15,9 @@ type Application = {
   status: string
   created_at: string
   updated_at: string | null
+  viewed_at?: string | null
+  application_source?: string | null
+  source?: string | null
   candidates?: {
     id: string
     first_name: string
@@ -182,6 +185,15 @@ export default function ApplicationsList({
       currency: 'GBP',
       maximumFractionDigits: 0,
     }).format(value)
+  }
+
+  function isNewApplication(app: Application) {
+    return !app.viewed_at
+  }
+
+  function isWebsiteApplication(app: Application) {
+    const source = String(app.application_source || app.source || '').toLowerCase()
+    return source.includes('website') || source.includes('web')
   }
 
   function sortApplications(a: Application, b: Application) {
@@ -655,6 +667,32 @@ export default function ApplicationsList({
                         >
                           {app.status.replace(/_/g, ' ')}
                         </span>
+
+                        {isNewApplication(app) && (
+                          <span
+                            className="crm-badge"
+                            style={{
+                              background: '#dcfce7',
+                              color: '#166534',
+                              border: '1px solid #bbf7d0',
+                            }}
+                          >
+                            NEW
+                          </span>
+                        )}
+
+                        {isWebsiteApplication(app) && (
+                          <span
+                            className="crm-badge"
+                            style={{
+                              background: '#dbeafe',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                            }}
+                          >
+                            WEBSITE APPLICATION
+                          </span>
+                        )}
                       </td>
 
                       <td>

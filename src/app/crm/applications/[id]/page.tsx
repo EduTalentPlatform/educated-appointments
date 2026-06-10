@@ -87,6 +87,22 @@ export default async function CrmApplicationPage({ params }: Props) {
   
     if (!application) notFound()
 
+  if (!application.viewed_at) {
+    const viewedAt = new Date().toISOString()
+
+    const { error: viewedError } = await supabase
+      .from('applications')
+      .update({ viewed_at: viewedAt })
+      .eq('id', id)
+      .is('viewed_at', null)
+
+    if (viewedError) {
+      console.error('Application viewed_at update error:', viewedError)
+    } else {
+      application.viewed_at = viewedAt
+    }
+  }
+
   const candidateId = (application.candidates as any)?.id
   const vacancyId = (application.vacancies as any)?.id
   const client = Array.isArray((application.vacancies as any)?.clients)
