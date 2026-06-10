@@ -1,9 +1,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Educated Appointments — AI client
-// Anthropic / Claude only
+// Anthropic + OpenAI router
 // ─────────────────────────────────────────────────────────────────────────────
 
-type AIProvider = 'anthropic'
+type AIProvider = 'anthropic' | 'openai'
+
+type AITaskType =
+  | 'default'
+  | 'email'
+  | 'outreach'
+  | 'sms'
+  | 'linkedin'
+  | 'matching'
+  | 'json'
+  | 'cv_parse'
+  | 'profile_builder'
+  | 'web_search'
 
 type AIOptions = {
   maxTokens?: number
@@ -12,21 +24,37 @@ type AIOptions = {
   system?: string
   autoContinue?: boolean
   maxContinuations?: number
+  provider?: AIProvider
+  taskType?: AITaskType
+  model?: string
+  cachePrompt?: boolean
+}
+
+type AIUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
 }
 
 type AIResult = {
   text: string
   provider: AIProvider
+  model?: string
   finishReason?: string
+  usage?: AIUsage
 }
 
-type ProviderResult = {
-  text: string
-  provider: AIProvider
-  finishReason?: string
-}
+type ProviderResult = AIResult
 
 const DEFAULT_MAX_TOKENS = 3000
+
+const DEFAULT_ANTHROPIC_MODEL =
+  process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514'
+
+const DEFAULT_OPENAI_LOW_COST_MODEL =
+  process.env.OPENAI_LOW_COST_MODEL ||
+  process.env.OPENAI_MODEL ||
+  'gpt-5.4-mini'
 
 const EA_BRAND_VOICE = `
 Educated Appointments brand voice and AI writing rules:
@@ -100,7 +128,7 @@ ${taskSystem}
 
 function isTokenLimitFinishReason(reason?: string) {
   if (!reason) return false
-  return ['max_tokens'].includes(reason)
+  return ['max_tokens', 'max_output_tokens'].includes(reason)
 }
 
 function cleanText(text: string) {
@@ -123,14 +151,71 @@ Finish the response properly.
 `.trim()
 }
 
+function hasOpenAIKey() {
+  return Boolean(process.env.OPENAI_API_KEY)
+}
+
+function hasAnthropicKey() {
+  return Boolean(process.env.ANTHROPIC_API_KEY)
+}
+
+function resolveProvider(options: RequiredResolvedOptions): AIProvider {
+  if (options.provider) {
+    if (options.provider === 'openai' && hasOpenAIKey()) return 'openai'
+    if (options.provider === 'anthropic' && hasAnthropicKey()) return 'anthropic'
+  }
+
+  // For now, keep web search on Claude because the current CRM already uses
+  // Anthropic web search patterns.
+  if (options.useWebSearch) {
+    return 'anthropic'
+  }
+
+  // Low-risk, high-volume writing/filtering tasks can use OpenAI if configured.
+  if (
+    hasOpenAIKey() &&
+    ['email', 'outreach', 'sms', 'linkedin', 'matching'].includes(
+      options.taskType,
+    )
+  ) {
+    return 'openai'
+  }
+
+  return 'anthropic'
+}
+
+function resolveOpenAIModel(options: RequiredResolvedOptions) {
+  if (options.model) return options.model
+
+  if (
+    ['email', 'outreach', 'sms', 'linkedin', 'matching'].includes(
+      options.taskType,
+    )
+  ) {
+    return DEFAULT_OPENAI_LOW_COST_MODEL
+  }
+
+  return DEFAULT_OPENAI_LOW_COST_MODEL
+}
+
+type RequiredResolvedOptions = Required<
+  Pick<
+    AIOptions,
+    | 'maxTokens'
+    | 'temperature'
+    | 'system'
+    | 'useWebSearch'
+    | 'autoContinue'
+    | 'maxContinuations'
+    | 'taskType'
+    | 'cachePrompt'
+  >
+> &
+  Pick<AIOptions, 'provider' | 'model'>
+
 async function callAnthropic(
   prompt: string,
-  options: Required<
-    Pick<
-      AIOptions,
-      'maxTokens' | 'temperature' | 'system' | 'useWebSearch'
-    >
-  >,
+  options: RequiredResolvedOptions,
 ): Promise<ProviderResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
@@ -139,7 +224,7 @@ async function callAnthropic(
   }
 
   const body: any = {
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    model: options.model || DEFAULT_ANTHROPIC_MODEL,
     max_tokens: options.maxTokens,
     temperature: options.temperature,
     system: options.system,
@@ -160,25 +245,35 @@ async function callAnthropic(
     ]
   }
 
+  // Anthropic supports prompt caching via cache_control. Keep this optional
+  // because we only want to enable it for stable repeated prompts.
+  if (options.cachePrompt) {
+    body.cache_control = { type: 'ephemeral' }
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+  }
+
+  if (options.useWebSearch) {
+    headers['anthropic-beta'] = 'web-search-2025-03-05'
+  }
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers,
     body: JSON.stringify(body),
   })
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
+  const data = await res.json().catch(() => ({}))
 
+  if (!res.ok) {
     throw new Error(
-      err?.error?.message ?? `Anthropic error ${res.status}`,
+      data?.error?.message ?? `Anthropic error ${res.status}`,
     )
   }
-
-  const data = await res.json()
 
   const text = (data.content ?? [])
     .filter((block: any) => block.type === 'text')
@@ -188,32 +283,176 @@ async function callAnthropic(
   return {
     text: cleanText(text),
     provider: 'anthropic',
+    model: body.model,
     finishReason: data.stop_reason,
+    usage: {
+      inputTokens: data.usage?.input_tokens,
+      outputTokens: data.usage?.output_tokens,
+      totalTokens:
+        typeof data.usage?.input_tokens === 'number' &&
+        typeof data.usage?.output_tokens === 'number'
+          ? data.usage.input_tokens + data.usage.output_tokens
+          : undefined,
+    },
   }
+}
+
+function extractOpenAIText(data: any) {
+  if (typeof data.output_text === 'string') {
+    return data.output_text
+  }
+
+  const chunks: string[] = []
+
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content?.type === 'output_text' && content?.text) {
+        chunks.push(content.text)
+      }
+
+      if (content?.type === 'text' && content?.text) {
+        chunks.push(content.text)
+      }
+    }
+  }
+
+  return chunks.join('')
+}
+
+function getOpenAIFinishReason(data: any) {
+  if (data?.status === 'incomplete') {
+    return data?.incomplete_details?.reason || 'max_output_tokens'
+  }
+
+  return data?.status || undefined
+}
+
+async function callOpenAI(
+  prompt: string,
+  options: RequiredResolvedOptions,
+): Promise<ProviderResult> {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('Missing OPENAI_API_KEY')
+  }
+
+  const model = resolveOpenAIModel(options)
+
+  const body: any = {
+    model,
+    input: [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: options.system,
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: prompt,
+          },
+        ],
+      },
+    ],
+    max_output_tokens: options.maxTokens,
+  }
+
+  // Some OpenAI models accept temperature, some do not. Add it first, and if
+  // the API rejects it, retry once without temperature.
+  if (typeof options.temperature === 'number') {
+    body.temperature = options.temperature
+  }
+
+  async function send(payload: any) {
+    return fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  let res = await send(body)
+  let data = await res.json().catch(() => ({}))
+
+  if (!res.ok && data?.error?.message?.toLowerCase?.().includes('temperature')) {
+    const retryBody = { ...body }
+    delete retryBody.temperature
+
+    res = await send(retryBody)
+    data = await res.json().catch(() => ({}))
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error?.message ?? `OpenAI error ${res.status}`)
+  }
+
+  const text = extractOpenAIText(data)
+
+  return {
+    text: cleanText(text),
+    provider: 'openai',
+    model,
+    finishReason: getOpenAIFinishReason(data),
+    usage: {
+      inputTokens: data.usage?.input_tokens,
+      outputTokens: data.usage?.output_tokens,
+      totalTokens: data.usage?.total_tokens,
+    },
+  }
+}
+
+async function callProvider(
+  prompt: string,
+  options: RequiredResolvedOptions,
+): Promise<ProviderResult> {
+  const provider = resolveProvider(options)
+
+  if (provider === 'openai') {
+    return callOpenAI(prompt, options)
+  }
+
+  return callAnthropic(prompt, options)
 }
 
 export async function callAI(
   prompt: string,
   options: AIOptions = {},
 ): Promise<AIResult> {
-  const resolvedOptions = {
+  const resolvedOptions: RequiredResolvedOptions = {
     maxTokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
     temperature: options.temperature ?? 0.7,
     useWebSearch: options.useWebSearch ?? false,
     system: buildSystemPrompt(options.system),
     autoContinue: options.autoContinue ?? true,
     maxContinuations: options.maxContinuations ?? 2,
+    provider: options.provider,
+    taskType: options.taskType ?? 'default',
+    model: options.model,
+    cachePrompt: options.cachePrompt ?? false,
   }
 
-  let result = await callAnthropic(prompt, resolvedOptions)
+  let result = await callProvider(prompt, resolvedOptions)
 
   if (!result.text) {
-    throw new Error('Anthropic returned empty text')
+    throw new Error(`${result.provider} returned empty text`)
   }
 
   let finalText = result.text
   let finishReason = result.finishReason
   let continuations = 0
+  const provider = result.provider
+  const model = result.model
+  const usage = result.usage
 
   while (
     resolvedOptions.autoContinue &&
@@ -222,9 +461,13 @@ export async function callAI(
   ) {
     continuations++
 
-    const continued = await callAnthropic(
+    const continued = await callProvider(
       buildContinuationPrompt(prompt, finalText),
-      resolvedOptions,
+      {
+        ...resolvedOptions,
+        provider,
+        model,
+      },
     )
 
     if (!continued.text) break
@@ -235,8 +478,10 @@ export async function callAI(
 
   return {
     text: finalText,
-    provider: 'anthropic',
+    provider,
+    model,
     finishReason,
+    usage,
   }
 }
 
@@ -246,6 +491,7 @@ export async function callAIEmail(prompt: string): Promise<AIResult> {
     temperature: 0.7,
     autoContinue: true,
     maxContinuations: 2,
+    taskType: 'email',
     system: DEFAULT_SYSTEM_PROMPT,
   })
 }
@@ -256,6 +502,8 @@ export async function callAIJson<T = any>(
 ): Promise<T> {
   const { text } = await callAI(prompt, {
     ...options,
+    provider: options.provider ?? 'anthropic',
+    taskType: options.taskType ?? 'json',
     maxTokens: options.maxTokens ?? 2500,
     temperature: options.temperature ?? 0.2,
     autoContinue: false,

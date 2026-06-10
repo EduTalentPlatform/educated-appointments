@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { callAI } from '@/lib/ai-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -49,48 +50,12 @@ End with a soft call to action.
 `
 }
 
-async function runClaude(prompt: string) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is missing.')
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
-      temperature: 0.25,
-      system:
-        'You are a UK recruitment consultant at Educated Appointments writing LinkedIn candidate outreach messages. Write in British English. Sound human, direct, warm and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Keep the employer anonymous. Do not invent facts.',
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  })
-
-  const data = await res.json()
-
-  if (!res.ok) {
-    throw new Error(data?.error?.message || 'Could not generate LinkedIn outreach.')
-  }
-
-  return (data.content || [])
-    .map((part: any) => (part.type === 'text' ? part.text : ''))
-    .join('\n')
-    .trim()
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
     const messageType = String(body.message_type || 'connection_request')
-        const extraContext = String(body.extra_context || '').trim()
+    const extraContext = String(body.extra_context || '').trim()
     const linkedinSearchQuery = String(body.linkedin_search_query || '').trim()
     const vacancy = body.vacancy || {}
     const client = body.client || {}
@@ -148,9 +113,16 @@ Client data for context only. Do not reveal identity:
 ${safeText(JSON.stringify(client, null, 2), 4000)}
 `
 
-    const message = await runClaude(prompt)
+    const { text, provider, model } = await callAI(prompt, {
+      maxTokens: 1200,
+      temperature: 0.35,
+      taskType: 'linkedin',
+      autoContinue: false,
+      system:
+        'You are a UK recruitment consultant at Educated Appointments writing LinkedIn candidate outreach messages. Write in British English. Sound human, direct, warm and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Keep the employer anonymous. Do not invent facts.',
+    })
 
-    return NextResponse.json({ message })
+    return NextResponse.json({ message: text, provider, model })
   } catch (error: any) {
     console.error('Vacancy LinkedIn outreach error:', error)
 

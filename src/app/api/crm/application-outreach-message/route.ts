@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { callAI } from '@/lib/ai-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -79,40 +80,11 @@ Joe
 `
 }
 
-async function runClaude(prompt: string) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is missing.')
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-      max_tokens: 1200,
-      temperature: 0.25,
-      system:
-        'You are a UK recruitment consultant at Educated Appointments writing candidate outreach messages. Write in British English. Sound human, direct and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Do not invent facts.',
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  })
-
-  const data = await res.json()
-
-  if (!res.ok) {
-    throw new Error(data?.error?.message || 'Could not generate outreach message.')
-  }
-
-  return (data.content || [])
-    .map((part: any) => (part.type === 'text' ? part.text : ''))
-    .join('\n')
-    .trim()
+function getTaskType(channel: string) {
+  if (channel === 'sms') return 'sms'
+  if (channel === 'linkedin') return 'linkedin'
+  if (channel === 'email') return 'email'
+  return 'outreach'
 }
 
 export async function POST(request: NextRequest) {
@@ -191,9 +163,16 @@ Client data for context only. Do not reveal the identity:
 ${safeText(JSON.stringify(client, null, 2), 4000)}
 `
 
-    const message = await runClaude(prompt)
+    const { text, provider, model } = await callAI(prompt, {
+      maxTokens: 1200,
+      temperature: 0.35,
+      taskType: getTaskType(channel),
+      autoContinue: false,
+      system:
+        'You are a UK recruitment consultant at Educated Appointments writing candidate outreach messages. Write in British English. Sound human, direct and professional. Avoid AI-style phrasing, hype, clichés and exaggerated claims. Do not invent facts.',
+    })
 
-    return NextResponse.json({ message })
+    return NextResponse.json({ message: text, provider, model })
   } catch (error: any) {
     console.error('Application outreach message error:', error)
 
