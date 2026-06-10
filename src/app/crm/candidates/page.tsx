@@ -15,7 +15,7 @@ export default async function CrmCandidatesPage() {
       .from('candidates')
       .select('*, applications(id, status)', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .range(0, 999),
+      .range(0, 4999),
 
     supabase
       .from('candidates')

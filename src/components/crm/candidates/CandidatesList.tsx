@@ -132,7 +132,11 @@ export default function CandidatesList({
   const [radiusSearchResults, setRadiusSearchResults] = useState<Candidate[] | null>(null)
 
   const [search, setSearch] = useState('')
-  const [mainRoleFilter, setMainRoleFilter] = useState('all')
+const [serverSearchResults, setServerSearchResults] = useState<Candidate[] | null>(null)
+const [serverSearchLoading, setServerSearchLoading] = useState(false)
+const [serverSearchError, setServerSearchError] = useState<string | null>(null)
+
+const [mainRoleFilter, setMainRoleFilter] = useState('all')
   const [specificRoleFilter, setSpecificRoleFilter] = useState('all')
   const [standardFilter, setStandardFilter] = useState('')
   const [standardOptionSearch, setStandardOptionSearch] = useState('')
@@ -174,12 +178,38 @@ export default function CandidatesList({
   })
 
   useEffect(() => {
-    if (!showForm || vacanciesLoaded || vacanciesLoading) return
+  if (!showForm || vacanciesLoaded || vacanciesLoading) return
 
-    void loadVacancyOptions()
-  }, [showForm, vacanciesLoaded, vacanciesLoading])
+  void loadVacancyOptions()
+}, [showForm, vacanciesLoaded, vacanciesLoading])
 
-  async function loadVacancyOptions() {
+function candidateSearchText(candidate: Candidate) {
+  return [
+    candidate.first_name,
+    candidate.last_name,
+    `${candidate.first_name || ''} ${candidate.last_name || ''}`,
+    candidate.email,
+    candidate.phone,
+    candidate.job_title,
+    candidate.seeking_role_type,
+    candidate.main_role_type,
+    candidate.sub_role_type,
+    candidate.can_deliver,
+    candidate.preferred_location,
+    candidate.postcode,
+    candidate.source,
+    candidate.linkedin,
+    candidate.qualifications,
+    candidate.notes,
+    candidate.town_city,
+    candidate.county,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+async function loadVacancyOptions() {
     setVacanciesLoading(true)
     setVacanciesError(null)
 
@@ -232,6 +262,103 @@ error = fallback.error
     setVacanciesLoaded(true)
     setVacanciesLoading(false)
   }
+
+  useEffect(() => {
+  const searchTerm = search.trim()
+
+  if (radiusSearchResults) {
+    setServerSearchResults(null)
+    setServerSearchError(null)
+    setServerSearchLoading(false)
+    return
+  }
+
+  if (searchTerm.length < 2) {
+    setServerSearchResults(null)
+    setServerSearchError(null)
+    setServerSearchLoading(false)
+    return
+  }
+
+  const timer = window.setTimeout(async () => {
+    setServerSearchLoading(true)
+    setServerSearchError(null)
+
+    try {
+      const terms = searchTerm
+        .toLowerCase()
+        .split(/\s+/)
+        .map(term => term.trim())
+        .filter(Boolean)
+
+      const queryTerms = terms.length > 1 ? terms : [searchTerm]
+
+      const searches = await Promise.all(
+        queryTerms.map(term =>
+          supabase
+            .from('candidates')
+            .select('*, applications(id, status)')
+            .or(
+              [
+                `first_name.ilike.%${term}%`,
+                `last_name.ilike.%${term}%`,
+                `email.ilike.%${term}%`,
+                `phone.ilike.%${term}%`,
+                `job_title.ilike.%${term}%`,
+                `seeking_role_type.ilike.%${term}%`,
+                `main_role_type.ilike.%${term}%`,
+                `sub_role_type.ilike.%${term}%`,
+                `can_deliver.ilike.%${term}%`,
+                `preferred_location.ilike.%${term}%`,
+                `postcode.ilike.%${term}%`,
+                `source.ilike.%${term}%`,
+                `linkedin.ilike.%${term}%`,
+                `qualifications.ilike.%${term}%`,
+                `notes.ilike.%${term}%`,
+                `town_city.ilike.%${term}%`,
+                `county.ilike.%${term}%`,
+              ].join(','),
+            )
+            .order('created_at', { ascending: false })
+            .limit(500),
+        ),
+      )
+
+      const firstError = searches.find(result => result.error)?.error
+
+      if (firstError) {
+        throw firstError
+      }
+
+      const merged = new Map<string, Candidate>()
+
+      searches.forEach(result => {
+        ;(result.data || []).forEach(candidate => {
+          merged.set(candidate.id, candidate as Candidate)
+        })
+      })
+
+      const rows = Array.from(merged.values())
+
+      const filteredRows =
+        terms.length > 1
+          ? rows.filter(candidate => {
+              const haystack = candidateSearchText(candidate)
+              return terms.every(term => haystack.includes(term))
+            })
+          : rows
+
+      setServerSearchResults(filteredRows)
+    } catch (error: any) {
+      setServerSearchError(error?.message || 'Could not search candidates.')
+      setServerSearchResults([])
+    } finally {
+      setServerSearchLoading(false)
+    }
+  }, 350)
+
+  return () => window.clearTimeout(timer)
+}, [search, radiusSearchResults, supabase])
 
     async function runRadiusSearch(event?: FormEvent) {
     event?.preventDefault()
@@ -342,7 +469,7 @@ const visibleStandardOptions = useMemo(() => {
     return Array.from(new Set(fromCandidates)).sort()
   }, [candidates])
 
-    const candidateRows = radiusSearchResults ?? candidates
+    const candidateRows = radiusSearchResults ?? serverSearchResults ?? candidates
 
   const filtered = candidateRows
   .filter(c => {
@@ -455,6 +582,9 @@ const visibleStandardOptions = useMemo(() => {
 
   function clearFilters() {
   setSearch('')
+  setServerSearchResults(null)
+  setServerSearchError(null)
+  setServerSearchLoading(false)
   setMainRoleFilter('all')
   setSpecificRoleFilter('all')
   setStandardFilter('')
@@ -900,6 +1030,18 @@ const visibleStandardOptions = useMemo(() => {
         onChange={e => setSearch(e.target.value)}
       />
     </div>
+
+    {serverSearchLoading && search.trim().length >= 2 && !radiusSearchResults && (
+  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>
+    Searching full candidate database...
+  </span>
+)}
+
+{serverSearchError && (
+  <span style={{ fontSize: 12, color: '#991b1b', fontWeight: 700 }}>
+    {serverSearchError}
+  </span>
+)}
 
     <div
       className="crm-status-filters"
