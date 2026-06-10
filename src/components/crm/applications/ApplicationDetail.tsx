@@ -3324,19 +3324,18 @@ function PortalPresentationTab({
                           Preview not available
                         </p>
 
-                        <a
-                          href={formattedCv.file_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
                           className="crm-btn-primary crm-btn-sm"
                           style={{
                             marginTop: 12,
                             display: 'inline-flex',
                             textDecoration: 'none',
                           }}
+                          onClick={() => openSecureDocument(formattedCv, 'candidate')}
                         >
                           Open formatted CV
-                        </a>
+                        </button>
                       </div>
                     </div>
                   )}
