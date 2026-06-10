@@ -129,27 +129,45 @@ export async function POST(request: NextRequest) {
     const storageInfo = getDocumentStorageInfo(document)
 
     if (storageInfo?.bucket && storageInfo?.path) {
-      const { data, error: signedError } = await supabase.storage
-        .from(storageInfo.bucket)
-        .createSignedUrl(storageInfo.path, SIGNED_URL_SECONDS)
+      const fallbackBuckets =
+        documentKind === 'vacancy'
+          ? ['vacancy-documents']
+          : ['candidate-documents', 'cvs']
 
-      if (signedError || !data?.signedUrl) {
-        return NextResponse.json(
-          {
-            error:
-              signedError?.message ||
-              'Could not create a secure document link.',
-          },
-          { status: 400 },
-        )
+      const bucketsToTry = Array.from(
+        new Set([storageInfo.bucket, ...fallbackBuckets].filter(Boolean)),
+      )
+
+      const signedErrors: string[] = []
+
+      for (const bucket of bucketsToTry) {
+        const { data, error: signedError } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(storageInfo.path, SIGNED_URL_SECONDS)
+
+        if (data?.signedUrl) {
+          return NextResponse.json({
+            url: data.signedUrl,
+            name: document.name,
+            expires_in: SIGNED_URL_SECONDS,
+            is_signed_url: true,
+            bucket,
+          })
+        }
+
+        if (signedError?.message) {
+          signedErrors.push(`${bucket}: ${signedError.message}`)
+        }
       }
 
-      return NextResponse.json({
-        url: data.signedUrl,
-        name: document.name,
-        expires_in: SIGNED_URL_SECONDS,
-        is_signed_url: true,
-      })
+      return NextResponse.json(
+        {
+          error:
+            signedErrors.join(' | ') ||
+            'Could not create a secure document link.',
+        },
+        { status: 400 },
+      )
     }
 
     if (document.file_url) {
