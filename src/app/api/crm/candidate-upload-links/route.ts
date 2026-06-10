@@ -138,161 +138,187 @@ function buildCandidatePortalEmail({
     ? `Educated Appointments - ${roleContext.roleTitle} information & secure candidate portal`
     : 'Educated Appointments - Secure Document Upload & Privacy Confirmation'
 
-  const portalActionText = [
-  'Please complete your candidate portal using the secure link below:',
-  '',
-  'IMPORTANT - COMPLETE YOUR CANDIDATE PORTAL HERE:',
-  uploadUrl,
-  '',
-  'This allows us to keep your application details, documents and compliance information in one secure place.',
-  '',
-]
+  const introText = roleContext
+    ? [
+        'Further to our conversation, please find the details for the opportunity we discussed below.',
+        '',
+      ]
+    : []
 
-const roleText = roleContext
-  ? [
-      'Further to our conversation, please find the details for the opportunity we discussed below.',
-      '',
-      `Role: ${roleContext.roleTitle || 'Not specified'}`,
-      roleContext.employerName
-        ? `Employer: ${roleContext.employerName}`
-        : '',
-      roleContext.location ? `Location: ${roleContext.location}` : '',
-      roleContext.salary ? `Salary: ${roleContext.salary}` : '',
-      roleContext.employerWebsite
-        ? `Employer website: ${roleContext.employerWebsiteUrl || roleContext.employerWebsite}`
-        : '',
+  const portalActionText = [
+    'Please complete your candidate portal using the secure link below:',
+    '',
+    'IMPORTANT - COMPLETE YOUR CANDIDATE PORTAL HERE:',
+    uploadUrl,
+    '',
+    'This allows us to keep your application details, documents and compliance information in one secure place.',
+    '',
+  ]
+
+  const roleText: string[] = []
+
+  if (roleContext) {
+    roleText.push(`Role: ${roleContext.roleTitle || 'Not specified'}`)
+
+    if (roleContext.employerName) {
+      roleText.push(`Employer: ${roleContext.employerName}`)
+    }
+
+    if (roleContext.location) {
+      roleText.push(`Location: ${roleContext.location}`)
+    }
+
+    if (roleContext.salary) {
+      roleText.push(`Salary: ${roleContext.salary}`)
+    }
+
+    if (roleContext.employerWebsite) {
+      roleText.push(
+        `Employer website: ${roleContext.employerWebsiteUrl || roleContext.employerWebsite}`,
+      )
+    }
+
+    roleText.push(
       '',
       'Role information:',
       '',
       roleContext.jobDescription || 'Role information to follow.',
       '',
-    ].filter(Boolean)
-  : []
+    )
+  }
 
-const text = [
-  `Hi ${firstName || 'there'},`,
-  '',
-  ...portalActionText,
-  ...roleText,
-  requestedLabels.length > 0 ? 'Requested documents:' : '',
-  ...requestedLabels.map(label => `- ${label}`),
-  requestedLabels.length > 0 ? '' : '',
-  message || '',
-  '',
-  'The portal will also ask you to review and accept our Candidate Privacy Notice if this has not already been completed.',
-  '',
-  'Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.',
-  '',
-  'If you have any questions, please contact us at joseph@educatedappointments.co.uk.',
-  '',
-  'Kind regards,',
-  'Joe',
-  'Educated Appointments',
-]
-  .filter(line => line !== null)
-  .join('\n')
+  const text = [
+    `Hi ${firstName || 'there'},`,
+    '',
+    ...introText,
+    ...portalActionText,
+    ...roleText,
+    ...(requestedLabels.length > 0 ? ['', 'Requested documents:'] : []),
+    ...requestedLabels.map(label => `- ${label}`),
+    requestedLabels.length > 0 ? '' : '',
+    message || '',
+    '',
+    'The portal will also ask you to review and accept our Candidate Privacy Notice if this has not already been completed.',
+    '',
+    'Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.',
+    '',
+    'If you have any questions, please contact us at joseph@educatedappointments.co.uk.',
+    '',
+    'Kind regards,',
+    'Joe',
+    'Educated Appointments',
+  ]
+    .filter(line => line !== null)
+    .join('\n')
 
-const requestedHtml =
-  requestedLabels.length > 0
-    ? `<p><strong>Requested documents:</strong></p><ul>${requestedLabels
-        .map(label => `<li>${escapeHtml(label)}</li>`)
-        .join('')}</ul>`
+  const requestedHtml =
+    requestedLabels.length > 0
+      ? `
+        <div style="margin:22px 0 0 0;">
+          <p style="margin:0 0 8px 0;"><strong>Requested documents:</strong></p>
+          <ul style="margin:0 0 18px 20px;padding:0;">
+            ${requestedLabels
+              .map(label => `<li>${escapeHtml(label)}</li>`)
+              .join('')}
+          </ul>
+        </div>
+      `
+      : ''
+
+  const messageHtml = message
+    ? `<p style="margin:18px 0;">${escapeHtml(message).replace(/\n/g, '<br />')}</p>`
     : ''
 
-const messageHtml = message
-  ? `<p>${escapeHtml(message).replace(/\n/g, '<br />')}</p>`
-  : ''
+  const portalCtaHtml = `
+    <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:18px;margin:18px 0 22px 0;">
+      <p style="margin:0 0 8px 0;font-size:16px;">
+        <strong>Action required: please complete your candidate portal</strong>
+      </p>
 
-const portalCtaHtml = `
-  <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:18px;margin:18px 0;">
-    <p style="margin:0 0 8px 0;font-size:16px;">
-      <strong>Action required: please complete your candidate portal</strong>
-    </p>
+      <p style="margin:0 0 14px 0;">
+        Please use the secure link below so we can progress your application and keep your documents, key details and compliance information in one place.
+      </p>
 
-    <p style="margin:0 0 14px 0;">
-      Please use the secure link below so we can progress your application and keep your documents, key details and compliance information in one place.
-    </p>
-
-    <p style="margin:0 0 12px 0;">
-      <a href="${escapeHtml(uploadUrl)}" style="display:inline-block;background:#352DEB;color:#ffffff;text-decoration:none;padding:11px 18px;border-radius:8px;font-weight:700;">
-        Complete candidate portal
-      </a>
-    </p>
-
-    <p style="margin:0;word-break:break-all;">
-      <strong>
-        <a href="${escapeHtml(uploadUrl)}" style="color:#111827;text-decoration:underline;">
-          ${escapeHtml(uploadUrl)}
+      <p style="margin:0 0 12px 0;">
+        <a href="${escapeHtml(uploadUrl)}" style="display:inline-block;background:#352DEB;color:#ffffff;text-decoration:none;padding:11px 18px;border-radius:8px;font-weight:700;">
+          Complete candidate portal
         </a>
-      </strong>
-    </p>
-  </div>
-`
+      </p>
 
-const roleHtml = roleContext
-  ? `
-    <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:18px 0;">
-      <p style="margin:0 0 10px 0;"><strong>Role:</strong> ${escapeHtml(roleContext.roleTitle || 'Not specified')}</p>
-      ${
-        roleContext.employerName
-          ? `<p style="margin:0 0 10px 0;"><strong>Employer:</strong> ${escapeHtml(roleContext.employerName)}</p>`
-          : ''
-      }
-      ${
-        roleContext.location
-          ? `<p style="margin:0 0 10px 0;"><strong>Location:</strong> ${escapeHtml(roleContext.location)}</p>`
-          : ''
-      }
-      ${
-        roleContext.salary
-          ? `<p style="margin:0 0 10px 0;"><strong>Salary:</strong> ${escapeHtml(roleContext.salary)}</p>`
-          : ''
-      }
-      ${
-        roleContext.employerWebsite
-          ? `<p style="margin:0 0 10px 0;"><strong>Employer website:</strong> <a href="${escapeHtml(roleContext.employerWebsiteUrl)}">${escapeHtml(roleContext.employerWebsite)}</a></p>`
-          : ''
-      }
-
-      <p style="margin:16px 0 8px 0;"><strong>Role information:</strong></p>
-      <div style="white-space:normal;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;">
-        ${multilineHtml(roleContext.jobDescription || 'Role information to follow.')}
-      </div>
+      <p style="margin:0;word-break:break-all;">
+        <strong>
+          <a href="${escapeHtml(uploadUrl)}" style="color:#111827;text-decoration:underline;">
+            ${escapeHtml(uploadUrl)}
+          </a>
+        </strong>
+      </p>
     </div>
   `
-  : ''
 
-const introHtml = roleContext
-  ? `<p>Further to our conversation, please find the details for the opportunity we discussed below.</p>`
-  : `<p>Please complete your secure candidate portal using the link below.</p>`
+  const roleHtml = roleContext
+    ? `
+      <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:22px 0;">
+        <p style="margin:0 0 10px 0;"><strong>Role:</strong> ${escapeHtml(roleContext.roleTitle || 'Not specified')}</p>
+        ${
+          roleContext.employerName
+            ? `<p style="margin:0 0 10px 0;"><strong>Employer:</strong> ${escapeHtml(roleContext.employerName)}</p>`
+            : ''
+        }
+        ${
+          roleContext.location
+            ? `<p style="margin:0 0 10px 0;"><strong>Location:</strong> ${escapeHtml(roleContext.location)}</p>`
+            : ''
+        }
+        ${
+          roleContext.salary
+            ? `<p style="margin:0 0 10px 0;"><strong>Salary:</strong> ${escapeHtml(roleContext.salary)}</p>`
+            : ''
+        }
+        ${
+          roleContext.employerWebsite
+            ? `<p style="margin:0 0 10px 0;"><strong>Employer website:</strong> <a href="${escapeHtml(roleContext.employerWebsiteUrl)}">${escapeHtml(roleContext.employerWebsite)}</a></p>`
+            : ''
+        }
 
-const html = `
-  <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#111827;">
-    <p>Hi ${escapeHtml(firstName || 'there')},</p>
+        <p style="margin:16px 0 8px 0;"><strong>Role information:</strong></p>
+        <div style="white-space:normal;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:14px;">
+          ${multilineHtml(roleContext.jobDescription || 'Role information to follow.')}
+        </div>
+      </div>
+    `
+    : ''
 
-    ${introHtml}
+  const introHtml = roleContext
+    ? `<p style="margin:0 0 16px 0;">Further to our conversation, please find the details for the opportunity we discussed below.</p>`
+    : `<p style="margin:0 0 16px 0;">Please complete your secure candidate portal using the link below.</p>`
 
-    ${portalCtaHtml}
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#111827;">
+      <p>Hi ${escapeHtml(firstName || 'there')},</p>
 
-    ${roleHtml}
+      ${introHtml}
 
-    ${requestedHtml}
+      ${portalCtaHtml}
 
-    ${messageHtml}
+      ${roleHtml}
 
-    <p>The portal will also ask you to review and accept our Candidate Privacy Notice if this has not already been completed.</p>
+      ${requestedHtml}
 
-    <p>Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.</p>
+      ${messageHtml}
 
-    <p>If you have any questions, please contact us at joseph@educatedappointments.co.uk.</p>
+      <p>The portal will also ask you to review and accept our Candidate Privacy Notice if this has not already been completed.</p>
 
-    <p>
-      Kind regards,<br />
-      Joe<br />
-      Educated Appointments
-    </p>
-  </div>
-`
+      <p>Documents uploaded through this link go directly into the Educated Appointments CRM and are not automatically released to employers.</p>
+
+      <p>If you have any questions, please contact us at joseph@educatedappointments.co.uk.</p>
+
+      <p>
+        Kind regards,<br />
+        Joe<br />
+        Educated Appointments
+      </p>
+    </div>
+  `
 
   return { subject, text, html }
 }
@@ -470,7 +496,7 @@ const previewOnly = body.preview_only === true || body.previewOnly === true
       subject: email.subject,
       html: email.html,
       text: email.text,
-      replyTo: 'info@educatedappointments.co.uk',
+      replyTo: 'joseph@educatedappointments.co.uk',
     })
 
     const sentAt = new Date().toISOString()
