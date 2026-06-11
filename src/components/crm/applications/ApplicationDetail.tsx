@@ -2157,6 +2157,10 @@ Kind regards,`
 
   if (data.placement?.id) {
     setPlacement(data.placement)
+
+    await patchApp({
+      status: 'placed',
+    })
     window.location.href = `/crm/placements/${data.placement.id}`
     return
   }
