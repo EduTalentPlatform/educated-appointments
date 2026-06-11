@@ -241,7 +241,8 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
             county,
             postcode,
             salary_expected,
-            notice_period
+            notice_period,
+            dbs_status
           )
         `,
         )
