@@ -759,7 +759,7 @@ export default function EmployerCandidateCard({
                 background: 'var(--success-light)',
                 border: '1px solid rgba(33,120,34,0.18)',
                 borderRadius: 16,
-                padding: 14,
+                padding: 16,
                 marginBottom: 18,
               }}
             >
@@ -774,28 +774,80 @@ export default function EmployerCandidateCard({
                 Interview arranged
               </p>
 
-              <p
+              <div
                 style={{
-                  margin: 0,
-                  marginTop: 5,
-                  fontSize: 12,
-                  lineHeight: 1.6,
-                  color: 'var(--text-dark)',
+                  marginTop: 10,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: 8,
                 }}
               >
-                {application.client_interview_date
-                  ? formatInterviewDate(application.client_interview_date)
-                  : 'Date TBC'}
-                {application.client_interview_time
-                  ? ` · ${application.client_interview_time}`
-                  : ''}
-                {application.client_interview_format
-                  ? ` · ${labelInterviewFormat(application.client_interview_format)}`
-                  : ''}
-                {application.client_interview_location
-                  ? ` · ${application.client_interview_location}`
-                  : ''}
-              </p>
+                <MiniFact
+                  label="Date"
+                  value={
+                    application.client_interview_date
+                      ? formatInterviewDate(application.client_interview_date)
+                      : 'TBC'
+                  }
+                />
+
+                <MiniFact
+                  label="Time"
+                  value={application.client_interview_time || 'TBC'}
+                />
+
+                <MiniFact
+                  label="Format"
+                  value={
+                    application.client_interview_format
+                      ? labelInterviewFormat(application.client_interview_format)
+                      : 'TBC'
+                  }
+                />
+
+                <MiniFact
+                  label="Location / venue"
+                  value={application.client_interview_location || 'TBC'}
+                />
+              </div>
+
+              {application.client_interview_notes && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    borderRadius: 12,
+                    padding: 12,
+                    background: '#ffffff',
+                    border: '1px solid rgba(33,120,34,0.12)',
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: 'var(--success)',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.6,
+                    }}
+                  >
+                    Interview notes / instructions
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      marginTop: 5,
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                      color: 'var(--text-dark)',
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {application.client_interview_notes}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
