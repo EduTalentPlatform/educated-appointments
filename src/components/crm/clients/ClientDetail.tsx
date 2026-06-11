@@ -27,6 +27,33 @@ type Client = {
   frameworks: string | null; total_placements: number | null; total_fees_earned: number | null
 }
 type Contact = { id: string; name: string; title: string | null; email: string | null; phone: string | null; linkedin: string | null; role_type: string; is_primary: boolean }
+type Activity = {
+  id: string
+  client_id: string
+  client_contact_id: string | null
+  activity_type: string
+  direction: 'inbound' | 'outbound' | 'internal' | null
+  content: string | null
+  attendees: string | null
+  pain_points: string | null
+  roles_to_fill: string | null
+  psl_agencies: string | null
+  salary_notes: string | null
+  retention_notes: string | null
+  fee_agreed: string | null
+  decision_maker: string | null
+  next_steps: string | null
+  follow_up_date: string | null
+  created_at: string
+  updated_at?: string | null
+  client_contacts?: {
+    id: string
+    name: string
+    title: string | null
+    email: string | null
+    phone: string | null
+  } | null
+}
 type Vacancy = { id: string; title: string; status: string; sector: string | null; salary_min: number | null; salary_max: number | null; salary_display: string | null; location: string | null; created_at: string; applications?: any[] }
 type Placement = {
   id: string
@@ -93,6 +120,16 @@ type PortalUser = {
 
 const VACANCY_REGIONS = ['','East of England','East Midlands','West Midlands','North West','North East','Yorkshire & Humber','South East','South West','London','Wales','Scotland','Northern Ireland','National (Multi-site)']
 const ROLE_TYPES = ['Decision Maker','Influencer','Day-to-day','Finance','HR']
+
+const ACTIVITY_TYPES = [
+  { id: 'call', label: 'Call', icon: '📞' },
+  { id: 'email', label: 'Email', icon: '✉️' },
+  { id: 'linkedin', label: 'LinkedIn', icon: '💼' },
+  { id: 'sms', label: 'SMS', icon: '💬' },
+  { id: 'meeting', label: 'Meeting', icon: '🤝' },
+  { id: 'bd_meeting', label: 'BD Meeting', icon: '📋' },
+  { id: 'note', label: 'Note', icon: '📝' },
+]
 const HEALTH_COLOURS: Record<string, { bg: string; text: string; dot: string }> = {
   hot:  { bg: '#fef2f2', text: '#e53e3e', dot: '#e53e3e' },
   warm: { bg: '#fffbeb', text: '#d97706', dot: '#d97706' },
@@ -143,6 +180,7 @@ interface Props {
   placements?: Placement[]
   portalUsers?: PortalUser[]
   initialSites?: ProviderSite[]
+  initialActivities?: Activity[]
 }
 
 export default function ClientDetail({
@@ -153,6 +191,7 @@ export default function ClientDetail({
   placements = [],
   portalUsers = [],
   initialSites = [],
+  initialActivities = [],
 }: Props) {
   const { roleTypeHierarchy: crmRoleTypeHierarchy, mainRoleTypes: crmMainRoleTypes } = useCrmRoleSettings()
 
@@ -163,11 +202,39 @@ export default function ClientDetail({
   const [vacancies, setVacancies] = useState(initialVacancies)
   const [contacts, setContacts] = useState(initialContacts)
   const [sites, setSites] = useState(initialSites)
-  const [activeTab, setActiveTab] = useState<
-  'overview' | 'terms' | 'vacancies' | 'placements' | 'documents' | 'portal'
->('overview')
+const [activities, setActivities] = useState(initialActivities)
+const [activeTab, setActiveTab] = useState<
+  | 'activity'
+  | 'overview'
+  | 'terms'
+  | 'vacancies'
+  | 'placements'
+  | 'documents'
+  | 'portal'
+>('activity')
 
-  // Contact state
+  // Activity state
+const [actType, setActType] = useState('call')
+const [actDirection, setActDirection] = useState<
+  'inbound' | 'outbound' | 'internal'
+>('outbound')
+const [actContactId, setActContactId] = useState('')
+const [actContent, setActContent] = useState('')
+const [bdForm, setBdForm] = useState({
+  attendees: '',
+  pain_points: '',
+  roles_to_fill: '',
+  psl_agencies: '',
+  salary_notes: '',
+  retention_notes: '',
+  fee_agreed: '',
+  decision_maker: '',
+  next_steps: '',
+  follow_up_date: '',
+})
+const [addingActivity, setAddingActivity] = useState(false)
+
+// Contact state
   const [showContactForm, setShowContactForm] = useState(false)
   const [contactForm, setContactForm] = useState({ name: '', title: '', email: '', phone: '', linkedin: '', role_type: 'Day-to-day', is_primary: false })
   const [addingContact, setAddingContact] = useState(false)
@@ -232,6 +299,26 @@ const [siteForm, setSiteForm] = useState({
   const [nextReview, setNextReview] = useState(client.next_review_date ?? '')
 
   const primaryContact = contacts.find(c => c.is_primary) ?? contacts[0]
+  const actIcon = (type: string) =>
+  ACTIVITY_TYPES.find(activity => activity.id === type)?.icon ?? '📝'
+
+const actLabel = (type: string) =>
+  ACTIVITY_TYPES.find(activity => activity.id === type)?.label ?? type
+
+function resetBdForm() {
+  setBdForm({
+    attendees: '',
+    pain_points: '',
+    roles_to_fill: '',
+    psl_agencies: '',
+    salary_notes: '',
+    retention_notes: '',
+    fee_agreed: '',
+    decision_maker: '',
+    next_steps: '',
+    follow_up_date: '',
+  })
+}
   const liveVacs = vacancies.filter(v => v.status === 'live')
   const totalApps = vacancies.reduce(
   (sum, v) => sum + (v.applications?.length ?? 0),
@@ -252,7 +339,87 @@ const placedCount = placements.length
     .filter(v => v.status !== 'closed')
     .reduce((sum, v) => sum + (calcFee(v) ?? 0), 0)
 
-  // ── Contacts ──────────────────────────────────────────────────────────────
+  async function addActivity(e: React.FormEvent) {
+  e.preventDefault()
+
+  setAddingActivity(true)
+
+  const payload: any = {
+    client_id: client.id,
+    activity_type: actType,
+    direction: actDirection,
+    client_contact_id: actContactId || null,
+    content: actContent || null,
+    follow_up_date:
+      actType === 'bd_meeting' ? bdForm.follow_up_date || null : null,
+  }
+
+  if (actType === 'bd_meeting') {
+    Object.assign(payload, {
+      attendees: bdForm.attendees || null,
+      pain_points: bdForm.pain_points || null,
+      roles_to_fill: bdForm.roles_to_fill || null,
+      psl_agencies: bdForm.psl_agencies || null,
+      salary_notes: bdForm.salary_notes || null,
+      retention_notes: bdForm.retention_notes || null,
+      fee_agreed: bdForm.fee_agreed || null,
+      decision_maker: bdForm.decision_maker || null,
+      next_steps: bdForm.next_steps || null,
+    })
+  }
+
+  const { data, error } = await supabase
+    .from('client_activities')
+    .insert(payload)
+    .select(
+      `
+      *,
+      client_contacts (
+        id,
+        name,
+        title,
+        email,
+        phone
+      )
+    `,
+    )
+    .single()
+
+  if (error) {
+    alert(error.message || 'Could not log activity.')
+    setAddingActivity(false)
+    return
+  }
+
+  if (data) {
+    setActivities(current => [data, ...current])
+    setActContent('')
+    setActDirection('outbound')
+    setActContactId('')
+    resetBdForm()
+  }
+
+  setAddingActivity(false)
+}
+
+async function deleteActivity(id: string) {
+  const confirmed = window.confirm('Delete this activity?')
+  if (!confirmed) return
+
+  const { error } = await supabase
+    .from('client_activities')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    alert(error.message || 'Could not delete activity.')
+    return
+  }
+
+  setActivities(current => current.filter(activity => activity.id !== id))
+}
+  
+    // ── Contacts ──────────────────────────────────────────────────────────────
   async function addContact(e: React.FormEvent) {
     e.preventDefault()
     setAddingContact(true)
@@ -509,8 +676,9 @@ async function deleteSite(id: string) {
       {/* ── TABS ────────────────────────────────────────────────────────────── */}
       <div className="crm-tabs">
   {[
-    { id: 'overview', label: '◉ Overview' },
-    { id: 'terms', label: '📋 Terms & Fees' },
+  { id: 'activity', label: `☰ Activity (${activities.length})` },
+  { id: 'overview', label: '◉ Overview' },
+  { id: 'terms', label: '📋 Terms & Fees' },
     { id: 'vacancies', label: `◫ Vacancies (${vacancies.length})` },
     { id: 'placements', label: `✓ Placements (${placements.length})` },
     { id: 'documents', label: '📄 Documents' },
@@ -526,6 +694,454 @@ async function deleteSite(id: string) {
   ))}
 </div>
 
+      {/* ══ ACTIVITY TAB ══════════════════════════════════════════════════════ */}
+{activeTab === 'activity' && (
+  <div className="crm-lead-layout">
+    <div className="crm-lead-sidebar">
+      <div className="crm-card">
+        <h3 className="crm-card-title" style={{ marginBottom: 14 }}>
+          Log activity
+        </h3>
+
+        <form onSubmit={addActivity}>
+          <div className="crm-field">
+            <label className="crm-label">Activity type</label>
+            <select
+              className="crm-select"
+              value={actType}
+              onChange={event => {
+                setActType(event.target.value)
+                if (event.target.value !== 'bd_meeting') resetBdForm()
+              }}
+            >
+              {ACTIVITY_TYPES.map(type => (
+                <option key={type.id} value={type.id}>
+                  {type.icon} {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="crm-form-row">
+            <div className="crm-field">
+              <label className="crm-label">Direction</label>
+              <select
+                className="crm-select"
+                value={actDirection}
+                onChange={event =>
+                  setActDirection(
+                    event.target.value as 'inbound' | 'outbound' | 'internal',
+                  )
+                }
+              >
+                <option value="outbound">Outbound</option>
+                <option value="inbound">Inbound</option>
+                <option value="internal">Internal</option>
+              </select>
+            </div>
+
+            <div className="crm-field">
+              <label className="crm-label">Contact</label>
+              <select
+                className="crm-select"
+                value={actContactId}
+                onChange={event => setActContactId(event.target.value)}
+              >
+                <option value="">No specific contact</option>
+                {contacts.map(contact => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="crm-field">
+            <label className="crm-label">Notes</label>
+            <textarea
+              className="crm-input"
+              rows={4}
+              placeholder={
+                actType === 'bd_meeting'
+                  ? 'Summary of the meeting...'
+                  : `Log a ${actLabel(actType).toLowerCase()}...`
+              }
+              value={actContent}
+              onChange={event => setActContent(event.target.value)}
+              style={{
+                lineHeight: 1.6,
+                resize: 'vertical',
+                minHeight: 96,
+              }}
+            />
+          </div>
+
+          {actType === 'bd_meeting' && (
+            <div
+              className="crm-card"
+              style={{
+                marginTop: 14,
+                marginBottom: 14,
+                background: 'var(--light-bg)',
+                boxShadow: 'none',
+              }}
+            >
+              <p
+                style={{
+                  fontSize: 13,
+                  fontWeight: 900,
+                  color: 'var(--primary)',
+                  marginBottom: 12,
+                }}
+              >
+                BD meeting notes
+              </p>
+
+              <div className="crm-field">
+                <label className="crm-label">Attendees</label>
+                <input
+                  className="crm-input"
+                  value={bdForm.attendees}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      attendees: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="crm-field">
+                <label className="crm-label">Pain points</label>
+                <textarea
+                  className="crm-input"
+                  rows={2}
+                  value={bdForm.pain_points}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      pain_points: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="crm-field">
+                <label className="crm-label">Roles to fill</label>
+                <textarea
+                  className="crm-input"
+                  rows={2}
+                  value={bdForm.roles_to_fill}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      roles_to_fill: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="crm-field">
+                <label className="crm-label">PSL / agencies</label>
+                <textarea
+                  className="crm-input"
+                  rows={2}
+                  value={bdForm.psl_agencies}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      psl_agencies: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="crm-form-row">
+                <div className="crm-field">
+                  <label className="crm-label">Salary notes</label>
+                  <textarea
+                    className="crm-input"
+                    rows={2}
+                    value={bdForm.salary_notes}
+                    onChange={event =>
+                      setBdForm(form => ({
+                        ...form,
+                        salary_notes: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="crm-field">
+                  <label className="crm-label">Retention notes</label>
+                  <textarea
+                    className="crm-input"
+                    rows={2}
+                    value={bdForm.retention_notes}
+                    onChange={event =>
+                      setBdForm(form => ({
+                        ...form,
+                        retention_notes: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="crm-form-row">
+                <div className="crm-field">
+                  <label className="crm-label">Fee agreed</label>
+                  <input
+                    className="crm-input"
+                    value={bdForm.fee_agreed}
+                    onChange={event =>
+                      setBdForm(form => ({
+                        ...form,
+                        fee_agreed: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="crm-field">
+                  <label className="crm-label">Decision maker</label>
+                  <input
+                    className="crm-input"
+                    value={bdForm.decision_maker}
+                    onChange={event =>
+                      setBdForm(form => ({
+                        ...form,
+                        decision_maker: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="crm-field">
+                <label className="crm-label">Next steps</label>
+                <textarea
+                  className="crm-input"
+                  rows={2}
+                  value={bdForm.next_steps}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      next_steps: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="crm-field">
+                <label className="crm-label">Follow-up date</label>
+                <input
+                  type="date"
+                  className="crm-input"
+                  value={bdForm.follow_up_date}
+                  onChange={event =>
+                    setBdForm(form => ({
+                      ...form,
+                      follow_up_date: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="crm-btn-primary"
+            disabled={addingActivity}
+            style={{ width: '100%' }}
+          >
+            {addingActivity ? 'Saving...' : `Log ${actLabel(actType)}`}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div className="crm-lead-content">
+      <div className="crm-section-block">
+        <div className="crm-section-block-header">
+          <h2 className="crm-section-heading">Activity</h2>
+          <span className="crm-badge crm-badge-blue">
+            {activities.length}
+          </span>
+        </div>
+
+        {activities.length === 0 && (
+          <p className="crm-empty">No client activity logged yet.</p>
+        )}
+
+        <div style={{ display: 'grid', gap: 12 }}>
+          {activities.map(activity => (
+            <div key={activity.id} className="crm-card">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span
+                      className="crm-badge"
+                      style={{
+                        background: 'var(--primary-light)',
+                        color: 'var(--primary)',
+                      }}
+                    >
+                      {actIcon(activity.activity_type)}{' '}
+                      {actLabel(activity.activity_type)}
+                    </span>
+
+                    {activity.direction && (
+                      <span className="crm-badge crm-badge-blue">
+                        {activity.direction}
+                      </span>
+                    )}
+
+                    {activity.client_contacts?.name && (
+                      <span
+                        className="crm-badge"
+                        style={{
+                          background: '#f8fafc',
+                          color: '#475569',
+                        }}
+                      >
+                        {activity.client_contacts.name}
+                      </span>
+                    )}
+
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-muted)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {new Date(activity.created_at).toLocaleString('en-GB')}
+                    </span>
+                  </div>
+
+                  {activity.content && (
+                    <p
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--text-dark)',
+                        lineHeight: 1.65,
+                        whiteSpace: 'pre-wrap',
+                        marginBottom:
+                          activity.activity_type === 'bd_meeting' ? 12 : 0,
+                      }}
+                    >
+                      {activity.content}
+                    </p>
+                  )}
+
+                  {activity.activity_type === 'bd_meeting' && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 8,
+                        padding: 12,
+                        borderRadius: 12,
+                        background: 'var(--light-bg)',
+                        border: '1px solid var(--border-light)',
+                      }}
+                    >
+                      {activity.attendees && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Attendees:</strong> {activity.attendees}
+                        </p>
+                      )}
+                      {activity.pain_points && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Pain points:</strong> {activity.pain_points}
+                        </p>
+                      )}
+                      {activity.roles_to_fill && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Roles to fill:</strong>{' '}
+                          {activity.roles_to_fill}
+                        </p>
+                      )}
+                      {activity.psl_agencies && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>PSL / agencies:</strong>{' '}
+                          {activity.psl_agencies}
+                        </p>
+                      )}
+                      {activity.salary_notes && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Salary notes:</strong>{' '}
+                          {activity.salary_notes}
+                        </p>
+                      )}
+                      {activity.retention_notes && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Retention notes:</strong>{' '}
+                          {activity.retention_notes}
+                        </p>
+                      )}
+                      {activity.fee_agreed && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Fee agreed:</strong> {activity.fee_agreed}
+                        </p>
+                      )}
+                      {activity.decision_maker && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Decision maker:</strong>{' '}
+                          {activity.decision_maker}
+                        </p>
+                      )}
+                      {activity.next_steps && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Next steps:</strong> {activity.next_steps}
+                        </p>
+                      )}
+                      {activity.follow_up_date && (
+                        <p style={{ fontSize: 12, margin: 0 }}>
+                          <strong>Follow-up:</strong>{' '}
+                          {new Date(
+                            activity.follow_up_date,
+                          ).toLocaleDateString('en-GB')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="crm-icon-btn crm-icon-btn-danger"
+                  onClick={() => deleteActivity(activity.id)}
+                  title="Delete activity"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+      
       {/* ══ OVERVIEW TAB ══════════════════════════════════════════════════════ */}
       {activeTab === 'overview' && (
         <div className="crm-lead-layout">

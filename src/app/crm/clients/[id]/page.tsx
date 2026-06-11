@@ -18,13 +18,14 @@ export default async function ClientDetailPage({ params }: Props) {
   const supabase = getServiceClient()
 
   const [
-    { data: client },
-    { data: vacancies },
-    { data: contacts },
-    { data: placements },
-    { data: portalUsers },
-    { data: sites },
-  ] = await Promise.all([
+  { data: client },
+  { data: vacancies },
+  { data: contacts },
+  { data: placements },
+  { data: portalUsers },
+  { data: sites },
+  { data: activities },
+] = await Promise.all([
     supabase
       .from('clients')
       .select('*')
@@ -82,18 +83,36 @@ export default async function ClientDetailPage({ params }: Props) {
       .eq('is_active', true)
       .order('is_primary', { ascending: false })
       .order('site_name', { ascending: true }),
+
+    supabase
+  .from('client_activities')
+  .select(
+    `
+    *,
+    client_contacts (
+      id,
+      name,
+      title,
+      email,
+      phone
+    )
+  `,
+  )
+  .eq('client_id', id)
+  .order('created_at', { ascending: false }),
   ])
 
   if (!client) notFound()
 
   return (
     <ClientDetail
-      client={client}
-      vacancies={vacancies ?? []}
-      contacts={contacts ?? []}
-      placements={placements ?? []}
-      portalUsers={portalUsers ?? []}
-      initialSites={sites ?? []}
-    />
+  client={client}
+  vacancies={vacancies ?? []}
+  contacts={contacts ?? []}
+  placements={placements ?? []}
+  portalUsers={portalUsers ?? []}
+  initialSites={sites ?? []}
+  initialActivities={activities ?? []}
+/>
   )
 }
