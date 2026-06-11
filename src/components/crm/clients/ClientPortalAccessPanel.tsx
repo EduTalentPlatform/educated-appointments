@@ -27,6 +27,12 @@ type Props = {
   initialPortalUsers: PortalUser[]
 }
 
+type EmailPreview = {
+  to: string
+  subject: string
+  text: string
+}
+
 function getInitialForm(contacts: Contact[]) {
   const firstContactWithEmail = contacts.find(contact => contact.email)
 
@@ -35,6 +41,66 @@ function getInitialForm(contacts: Contact[]) {
     name: firstContactWithEmail?.name ?? '',
     email: firstContactWithEmail?.email ?? '',
     role: firstContactWithEmail?.title ?? 'Employer',
+  }
+}
+
+function getFirstName(name?: string | null) {
+  return String(name || '').trim().split(/\s+/)[0] || 'there'
+}
+
+function getPortalLink() {
+  if (typeof window === 'undefined') return '/employer-portal/login'
+  return `${window.location.origin}/employer-portal/login`
+}
+
+function buildEmployerPortalIntroductionEmail({
+  name,
+  email,
+  temporaryPassword,
+}: {
+  name: string
+  email: string
+  temporaryPassword: string
+}): EmailPreview {
+  const portalLink = getPortalLink()
+
+  return {
+    to: email,
+    subject: 'Your Educated Appointments Employer Portal login',
+    text: `Hi ${getFirstName(name)},
+
+I hope you’re well.
+
+We’ve created access for you to the Educated Appointments Employer Portal.
+
+The portal gives you a secure place to review candidates we have submitted for your vacancies. Rather than sending everything back and forth by email, you’ll be able to log in and view the relevant role, candidate summaries, CVs and supporting information in one place.
+
+You can use the portal to:
+
+- Review candidates submitted for your vacancies
+- View candidate profiles, CVs and relevant supporting information
+- Provide feedback on candidates
+- Request interviews
+- Confirm whether a candidate should be progressed or rejected
+
+If a candidate is offered a role and accepts, any relevant documents we hold on file and are able to release will then be made available for you to download through the portal. This may include items such as qualification evidence, compliance documents and reference details, where these have been supplied and are appropriate to share at that stage.
+
+Your login details are below:
+
+Portal link: ${portalLink}
+Username: ${email}
+Temporary password: ${temporaryPassword}
+
+For security, you’ll be asked to change this temporary password the first time you log in. Once changed, you’ll use your new password for future access.
+
+The portal is only linked to the vacancies and candidates that Educated Appointments has shared with you, so you’ll only see information relevant to your organisation and the roles we are supporting.
+
+If you have any issues logging in, just reply to this email and I’ll be happy to help.
+
+Kind regards,
+
+Joe
+Educated Appointments`,
   }
 }
 
@@ -48,6 +114,8 @@ export default function ClientPortalAccessPanel({
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
+  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   const contactsWithEmail = useMemo(
     () => contacts.filter(contact => contact.email),
@@ -70,6 +138,7 @@ export default function ClientPortalAccessPanel({
     setCreating(true)
     setMessage(null)
     setTemporaryPassword(null)
+    setEmailPreview(null)
 
     const res = await fetch('/api/crm/client-portal-users', {
       method: 'POST',
@@ -94,10 +163,42 @@ export default function ClientPortalAccessPanel({
     if (data?.portalUser) {
       setPortalUsers(current => [data.portalUser, ...current])
       setTemporaryPassword(data.temporaryPassword)
-      setMessage('Portal login created.')
+      setEmailPreview(
+        buildEmployerPortalIntroductionEmail({
+          name: data.portalUser.name,
+          email: data.portalUser.email,
+          temporaryPassword: data.temporaryPassword,
+        }),
+      )
+      setMessage('Portal login created. Review the introduction email before sending.')
     }
 
     setCreating(false)
+  }
+
+  async function sendIntroductionEmail() {
+    if (!emailPreview) return
+
+    setSendingEmail(true)
+    setMessage(null)
+
+    const res = await fetch('/api/crm/client-portal-users/introduction-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPreview),
+    })
+
+    const data = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setMessage(data?.error || 'Could not send introduction email.')
+      setSendingEmail(false)
+      return
+    }
+
+    setMessage(`Introduction email sent to ${emailPreview.to}.`)
+    setEmailPreview(null)
+    setSendingEmail(false)
   }
 
   async function toggleActive(user: PortalUser) {
@@ -254,11 +355,132 @@ export default function ClientPortalAccessPanel({
                 </p>
               </div>
             )}
+
+            {emailPreview && (
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  border: '1px solid var(--border-light)',
+                  background: 'var(--white)',
+                  display: 'grid',
+                  gap: 10,
+                }}
+              >
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12,
+                      fontWeight: 900,
+                      color: 'var(--primary)',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Preview introduction email
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    To: {emailPreview.to}
+                  </p>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 11,
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Subject: {emailPreview.subject}
+                  </p>
+                </div>
+
+                <textarea
+                  className="crm-input"
+                  rows={18}
+                  value={emailPreview.text}
+                  onChange={event =>
+                    setEmailPreview(current =>
+                      current
+                        ? {
+                            ...current,
+                            text: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1.55,
+                    resize: 'vertical',
+                  }}
+                />
+
+                <button
+                  type="button"
+                  className="crm-btn-primary"
+                  onClick={sendIntroductionEmail}
+                  disabled={sendingEmail}
+                  style={{ justifyContent: 'center' }}
+                >
+                  {sendingEmail ? 'Sending...' : 'Send introduction email'}
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
 
       <div className="crm-lead-content">
+        <div className="crm-section-block">
+          <div className="crm-section-block-header">
+            <div>
+              <h2 className="crm-section-heading">Client contacts</h2>
+              <p className="crm-page-sub">
+                Contacts saved against this client. Use a contact to create an employer portal login.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {contacts.map(contact => (
+              <div key={contact.id} className="crm-list-row">
+                <div className="crm-list-row-info">
+                  <p className="crm-list-row-title">{contact.name}</p>
+                  <p className="crm-list-row-sub">
+                    {contact.title || 'Employer contact'}
+                    {contact.email ? ` · ${contact.email}` : ' · No email saved'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="crm-btn-ghost crm-btn-sm"
+                  onClick={() => selectContact(contact.id)}
+                  disabled={!contact.email}
+                >
+                  {contact.email ? 'Use for login' : 'Email required'}
+                </button>
+              </div>
+            ))}
+
+            {contacts.length === 0 && (
+              <p className="crm-empty">
+                No contacts have been added to this client yet. Add a contact on the Overview tab first.
+              </p>
+            )}
+          </div>
+        </div>
+
         <div className="crm-section-block">
           <div className="crm-section-block-header">
             <div>

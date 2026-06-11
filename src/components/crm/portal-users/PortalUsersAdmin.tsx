@@ -50,12 +50,78 @@ type PortalUser = {
   }>
 }
 
+type EmailPreview = {
+  to: string
+  subject: string
+  text: string
+}
+
 function normalise(value: unknown) {
   return String(value || '').trim().toLowerCase()
 }
 
 function displayClientName(client?: Client | null) {
   return client?.company_name || 'Unnamed client'
+}
+
+function getFirstName(name?: string | null) {
+  return String(name || '').trim().split(/\s+/)[0] || 'there'
+}
+
+function getPortalLink() {
+  if (typeof window === 'undefined') return '/employer-portal/login'
+  return `${window.location.origin}/employer-portal/login`
+}
+
+function buildEmployerPortalIntroductionEmail({
+  name,
+  email,
+  temporaryPassword,
+}: {
+  name: string
+  email: string
+  temporaryPassword: string
+}): EmailPreview {
+  const portalLink = getPortalLink()
+
+  return {
+    to: email,
+    subject: 'Your Educated Appointments Employer Portal login',
+    text: `Hi ${getFirstName(name)},
+
+I hope you’re well.
+
+We’ve created access for you to the Educated Appointments Employer Portal.
+
+The portal gives you a secure place to review candidates we have submitted for your vacancies. Rather than sending everything back and forth by email, you’ll be able to log in and view the relevant role, candidate summaries, CVs and supporting information in one place.
+
+You can use the portal to:
+
+- Review candidates submitted for your vacancies
+- View candidate profiles, CVs and relevant supporting information
+- Provide feedback on candidates
+- Request interviews
+- Confirm whether a candidate should be progressed or rejected
+
+If a candidate is offered a role and accepts, any relevant documents we hold on file and are able to release will then be made available for you to download through the portal. This may include items such as qualification evidence, compliance documents and reference details, where these have been supplied and are appropriate to share at that stage.
+
+Your login details are below:
+
+Portal link: ${portalLink}
+Username: ${email}
+Temporary password: ${temporaryPassword}
+
+For security, you’ll be asked to change this temporary password the first time you log in. Once changed, you’ll use your new password for future access.
+
+The portal is only linked to the vacancies and candidates that Educated Appointments has shared with you, so you’ll only see information relevant to your organisation and the roles we are supporting.
+
+If you have any issues logging in, just reply to this email and I’ll be happy to help.
+
+Kind regards,
+
+Joe
+Educated Appointments`,
+  }
 }
 
 function getContactRole(contact: ClientContact) {
@@ -106,6 +172,8 @@ export default function PortalUsersAdmin({
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   const filteredClients = useMemo(() => {
     const q = normalise(search)
@@ -161,6 +229,7 @@ export default function PortalUsersAdmin({
   async function sendPasswordReset(user: PortalUser) {
     setBusyId(`reset-${user.id}`)
     setMessage(null)
+    setEmailPreview(null)
 
     const res = await fetch('/api/crm/client-portal-users/password-reset', {
       method: 'POST',
@@ -211,33 +280,51 @@ export default function PortalUsersAdmin({
     }
 
     const portalUser = json?.portalUser as PortalUser | undefined
+    const temporaryPassword = String(json?.temporaryPassword || '')
 
-    if (portalUser?.id) {
-      const resetRes = await fetch(
-        '/api/crm/client-portal-users/password-reset',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ portal_user_id: portalUser.id }),
-        },
-      )
-
-      const resetJson = await resetRes.json().catch(() => null)
-
-      if (!resetRes.ok) {
-        setMessage(
-          resetJson?.error ||
-            'Portal login created, but the password email could not be sent.',
-        )
-        setBusyId(null)
-        await refreshPortalData()
-        return
-      }
+    if (!portalUser?.id || !temporaryPassword) {
+      setMessage('Portal login created, but the introduction email preview could not be prepared.')
+      setBusyId(null)
+      await refreshPortalData()
+      return
     }
 
-    setMessage(`Portal login created and password link sent to ${contact.email}.`)
+    setEmailPreview(
+      buildEmployerPortalIntroductionEmail({
+        name: portalUser.name || contact.name,
+        email: portalUser.email || contact.email,
+        temporaryPassword,
+      }),
+    )
+
+    setMessage(`Portal login created for ${contact.email}. Review the introduction email before sending.`)
     setBusyId(null)
     await refreshPortalData()
+  }
+
+  async function sendIntroductionEmail() {
+    if (!emailPreview) return
+
+    setSendingEmail(true)
+    setMessage(null)
+
+    const res = await fetch('/api/crm/client-portal-users/introduction-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPreview),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setMessage(json?.error || 'Could not send introduction email.')
+      setSendingEmail(false)
+      return
+    }
+
+    setMessage(`Introduction email sent to ${emailPreview.to}.`)
+    setEmailPreview(null)
+    setSendingEmail(false)
   }
 
   async function toggleActive(user: PortalUser) {
@@ -635,6 +722,124 @@ export default function PortalUsersAdmin({
               {message}
             </p>
           )}
+
+          {emailPreview && (
+            <div
+              style={{
+                marginTop: 16,
+                padding: 14,
+                borderRadius: 16,
+                border: '1px solid var(--border-light)',
+                background: 'var(--light-bg)',
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    color: 'var(--primary)',
+                  }}
+                >
+                  Preview introduction email
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 5,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  To: {emailPreview.to}
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 2,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Subject: {emailPreview.subject}
+                </p>
+              </div>
+
+              <textarea
+                value={emailPreview.text}
+                onChange={event =>
+                  setEmailPreview(current =>
+                    current
+                      ? {
+                          ...current,
+                          text: event.target.value,
+                        }
+                      : current,
+                  )
+                }
+                rows={18}
+                style={{
+                  width: '100%',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: 12,
+                  fontFamily: 'inherit',
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  resize: 'vertical',
+                  background: 'var(--white)',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setEmailPreview(null)}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    padding: '9px 11px',
+                    background: 'var(--white)',
+                    color: 'var(--text-dark)',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={sendIntroductionEmail}
+                  disabled={sendingEmail}
+                  style={{
+                    border: 0,
+                    borderRadius: 10,
+                    padding: '9px 11px',
+                    background: 'var(--primary)',
+                    color: 'var(--white)',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: sendingEmail ? 'wait' : 'pointer',
+                    opacity: sendingEmail ? 0.7 : 1,
+                  }}
+                >
+                  {sendingEmail ? 'Sending...' : 'Send introduction email'}
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
 
         {selectedContacts.length === 0 && unmatchedPortalUsers.length === 0 ? (
@@ -757,7 +962,7 @@ export default function PortalUsersAdmin({
                       >
                         {busyId === `create-${contact.id}`
                           ? 'Creating...'
-                          : 'Create login + send link'}
+                          : 'Create login + preview email'}
                       </button>
                     )}
                   </div>
