@@ -2115,6 +2115,27 @@ Kind regards,`
     setSavingClientInterview(false)
   }
 
+  async function handleApplicationStatusChange(nextStatus: string) {
+    if (nextStatus === 'submitted') {
+      setActiveTab('portal')
+      return
+    }
+
+    if (nextStatus === 'offer') {
+      await patchApp({ status: 'offer' })
+      setActiveTab('placement' as any)
+      return
+    }
+
+    if (nextStatus === 'placed') {
+      setActiveTab('placement' as any)
+      await createPlacementFromApplication()
+      return
+    }
+
+    await patchApp({ status: nextStatus })
+  }
+
   async function createPlacementFromApplication() {
   setCreatingPlacement(true)
 
@@ -2191,16 +2212,7 @@ Kind regards,`
   <select
               className="crm-select crm-select-sm"
               value={app.status}
-              onChange={e => {
-                const nextStatus = e.target.value
-
-                if (nextStatus === 'submitted') {
-                  setActiveTab('portal')
-                  return
-                }
-
-                patchApp({ status: nextStatus })
-              }}
+              onChange={e => handleApplicationStatusChange(e.target.value)}
               style={{
                 background: STAGE_COLOURS[app.status]?.bg,
                 color: STAGE_COLOURS[app.status]?.text,
