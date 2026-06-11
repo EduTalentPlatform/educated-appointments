@@ -516,66 +516,102 @@ export default function EmployerCandidateCard({
 
     if (!details || typeof details !== 'object') return []
 
-    const rows = [
-      {
-        label: 'Name',
-        value:
-          details.referee_name ||
-          details.reference_name ||
-          details.name ||
-          details.contact_name,
-      },
-      {
-        label: 'Job title',
-        value:
-          details.referee_job_title ||
-          details.job_title ||
-          details.position ||
-          details.title,
-      },
-      {
-        label: 'Company',
-        value:
-          details.referee_company ||
-          details.company ||
-          details.organisation ||
-          details.employer,
-      },
-      {
-        label: 'Relationship',
-        value:
-          details.relationship ||
-          details.relationship_to_candidate ||
-          details.capacity,
-      },
-      {
-        label: 'Email',
-        value:
-          details.referee_email ||
-          details.email ||
-          details.contact_email,
-      },
-      {
-        label: 'Phone',
-        value:
-          details.referee_phone ||
-          details.phone ||
-          details.telephone ||
-          details.mobile,
-      },
-      {
-        label: 'Status',
-        value: details.status,
-      },
-    ]
+    const usedKeys = new Set<string>()
+
+    function addRow(
+      rows: Array<{ label: string; value: string }>,
+      label: string,
+      keys: string[],
+    ) {
+      for (const key of keys) {
+        const value = String(details[key] ?? '').trim()
+
+        if (value) {
+          usedKeys.add(key)
+          rows.push({ label, value })
+          return
+        }
+      }
+    }
+
+    const rows: Array<{ label: string; value: string }> = []
+
+    addRow(rows, 'Name', [
+      'referee_name',
+      'reference_name',
+      'name',
+      'contact_name',
+      'full_name',
+    ])
+
+    addRow(rows, 'Job title', [
+      'referee_job_title',
+      'job_title',
+      'position',
+      'title',
+      'role',
+    ])
+
+    addRow(rows, 'Company', [
+      'referee_company',
+      'company',
+      'organisation',
+      'organization',
+      'employer',
+      'business_name',
+    ])
+
+    addRow(rows, 'Relationship', [
+      'relationship',
+      'relationship_to_candidate',
+      'capacity',
+      'known_as',
+      'how_known',
+    ])
+
+    addRow(rows, 'Email', [
+      'referee_email',
+      'email',
+      'contact_email',
+      'email_address',
+    ])
+
+    addRow(rows, 'Phone', [
+      'referee_phone',
+      'phone',
+      'telephone',
+      'mobile',
+      'contact_number',
+    ])
+
+    addRow(rows, 'Status', ['status'])
+
+    const ignoredKeys = new Set([
+      'source',
+      'upload_link_id',
+      'reference_number',
+      'submitted_at',
+      'created_at',
+      'updated_at',
+    ])
+
+    Object.entries(details).forEach(([key, rawValue]) => {
+      if (usedKeys.has(key) || ignoredKeys.has(key)) return
+
+      const value = String(rawValue ?? '').trim()
+      if (!value) return
+
+      const label = key
+        .replace(/^referee_/i, '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, letter => letter.toUpperCase())
+
+      rows.push({ label, value })
+    })
 
     return rows
-      .map(row => ({
-        label: row.label,
-        value: String(row.value ?? '').trim(),
-      }))
-      .filter(row => row.value)
   }
+
 
   function canDownloadSupportingDocument(doc: CandidateDocument) {
     if (isReferenceDocument(doc)) return false
@@ -1042,10 +1078,9 @@ export default function EmployerCandidateCard({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {documentsOnFile.map(doc => {
                   const isReference = isReferenceDocument(doc)
-                  const referenceRows =
-                    isReference && canDownloadDocuments
-                      ? getReferenceDetailRows(doc)
-                      : []
+                  const referenceRows = isReference
+                    ? getReferenceDetailRows(doc)
+                    : []
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
@@ -1141,7 +1176,7 @@ export default function EmployerCandidateCard({
                         )}
                       </div>
 
-                      {isReference && canDownloadDocuments ? (
+                      {isReference && referenceRows.length > 0 ? (
                         <span
                           style={{
                             flexShrink: 0,
