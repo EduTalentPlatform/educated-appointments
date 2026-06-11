@@ -334,7 +334,9 @@ export default function EmployerCandidateCard({
   }
 
   function canDownloadSupportingDocument(doc: CandidateDocument) {
-    return Boolean(canDownloadDocuments && (doc.released || doc.visible_to_employer))
+    // At this stage, employers can only download/open the CV.
+    // Supporting documents are shown as being on file, but are not downloadable.
+    return false
   }
 
     async function openEmployerDocument(doc: CandidateDocument) {
@@ -784,7 +786,7 @@ export default function EmployerCandidateCard({
                           disabled={isOpening}
                           style={{ flexShrink: 0 }}
                         >
-                          {isOpening ? 'Opening...' : 'Download'}
+                          {isOpening ? 'Opening...' : 'Open'}
                         </button>
                       ) : (
                         <span

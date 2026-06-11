@@ -264,7 +264,7 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
       ? await supabase
           .from('candidate_documents')
                     .select(
-            'id, candidate_id, name, doc_type, summary, file_url, storage_bucket, storage_path, released, visible_to_employer, show_in_employer_portal, created_at',
+            'id, candidate_id, name, doc_type, summary, details, file_url, storage_bucket, storage_path, released, visible_to_employer, show_in_employer_portal, created_at',
           )
           .in('candidate_id', candidateIds)
           .order('created_at', { ascending: false })
