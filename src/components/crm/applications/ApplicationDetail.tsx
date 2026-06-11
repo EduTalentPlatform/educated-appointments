@@ -2128,8 +2128,8 @@ Kind regards,`
     }
 
     if (nextStatus === 'placed') {
+      await patchApp({ status: 'placed' })
       setActiveTab('placement' as any)
-      await createPlacementFromApplication()
       return
     }
 
@@ -2225,6 +2225,36 @@ Kind regards,`
                 </option>
               ))}
             </select>
+  {app.status === 'placed' && !placement && (
+    <button
+      type="button"
+      className="crm-btn-primary crm-btn-sm"
+      onClick={createPlacementFromApplication}
+      disabled={creatingPlacement}
+      style={{
+        marginLeft: 8,
+        background: '#217822',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {creatingPlacement ? 'Creating placement...' : '+ Add placement'}
+    </button>
+  )}
+
+  {placement?.id && (
+    <Link
+      href={`/crm/placements/${placement.id}`}
+      className="crm-btn-ghost crm-btn-sm"
+      style={{
+        marginLeft: 8,
+        textDecoration: 'none',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      Open placement →
+    </Link>
+  )}
+
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
