@@ -574,13 +574,47 @@ const [createError, setCreateError] = useState<string | null>(null)
   const selectedDocSafe = selectedDocument ?? candidateDocuments[0] ?? null
 
   const overviewCvDocument = useMemo(() => {
+  const normalise = (value?: string | null) =>
+    String(value || '').trim().toLowerCase()
+
   const docsWithFiles = candidateDocuments.filter(doc =>
     Boolean(doc.file_url || (doc.storage_bucket && doc.storage_path)),
   )
 
+  const isFormattedCv = (doc: CandidateDocument) => {
+    const type = normalise(doc.doc_type)
+    const name = normalise(doc.name)
+    const path = normalise(doc.storage_path)
+
+    return (
+      type === 'formatted_cv' ||
+      type === 'formatted cv' ||
+      name.includes('formatted cv') ||
+      path.includes('formatted_cv') ||
+      path.includes('formatted-cv')
+    )
+  }
+
+  const isCv = (doc: CandidateDocument) => {
+    const type = normalise(doc.doc_type)
+    const name = normalise(doc.name)
+    const path = normalise(doc.storage_path)
+
+    return (
+      type === 'cv' ||
+      type === 'resume' ||
+      name.includes('cv') ||
+      name.includes('resume') ||
+      name.includes('curriculum') ||
+      path.includes('cv') ||
+      path.includes('resume')
+    )
+  }
+
   return (
-    docsWithFiles.find(doc => doc.doc_type === 'formatted_cv') ||
-    docsWithFiles.find(doc => doc.doc_type === 'cv') ||
+    docsWithFiles.find(isFormattedCv) ||
+    docsWithFiles.find(isCv) ||
+    docsWithFiles[0] ||
     null
   )
 }, [candidateDocuments])
