@@ -45,21 +45,11 @@ export default function VacancyPortalAccessPanel({
     }, {})
   }, [accessRows])
 
-  async function updateAccess(
-    portalUserId: string,
-    updates: Partial<PortalAccess>,
-  ) {
-    const current = accessByUserId[portalUserId]
-
+  async function updateAccess(portalUserId: string, grantAccess: boolean) {
     const next = {
-      can_view_vacancy: current?.can_view_vacancy ?? false,
-      can_view_submissions: current?.can_view_submissions ?? false,
-      can_view_documents: current?.can_view_documents ?? false,
-      ...updates,
-    }
-
-    if (next.can_view_submissions || next.can_view_documents) {
-      next.can_view_vacancy = true
+      can_view_vacancy: grantAccess,
+      can_view_submissions: grantAccess,
+      can_view_documents: grantAccess,
     }
 
     setSavingUserId(portalUserId)
@@ -94,7 +84,11 @@ export default function VacancyPortalAccessPanel({
     })
 
     setSavingUserId(null)
-    setMessage('Portal access updated.')
+    setMessage(
+      grantAccess
+        ? 'Full portal access granted.'
+        : 'Portal access removed.',
+    )
   }
 
   if (!clientId) {
@@ -115,7 +109,9 @@ export default function VacancyPortalAccessPanel({
           <div>
             <h3 className="crm-card-title">Employer portal visibility</h3>
             <p className="crm-page-sub">
-              Choose which employer users can view this vacancy in their portal.
+              Select which employer users can access this vacancy. Once selected,
+              they will have access to the vacancy, submitted candidates and
+              document visibility for this role.
             </p>
           </div>
         </div>
@@ -145,9 +141,10 @@ export default function VacancyPortalAccessPanel({
             const row = accessByUserId[user.id]
             const saving = savingUserId === user.id
 
-            const canViewVacancy = row?.can_view_vacancy ?? false
-            const canViewSubmissions = row?.can_view_submissions ?? false
-            const canViewDocuments = row?.can_view_documents ?? false
+            const hasAccess =
+              row?.can_view_vacancy ||
+              row?.can_view_submissions ||
+              row?.can_view_documents
 
             return (
               <div
@@ -161,104 +158,53 @@ export default function VacancyPortalAccessPanel({
                     {user.email} · {user.role || 'Employer'}
                   </p>
 
-                  <div
+                  <p
                     style={{
-                      display: 'flex',
-                      gap: 14,
-                      flexWrap: 'wrap',
-                      marginTop: 10,
+                      margin: 0,
+                      marginTop: 8,
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.5,
                     }}
                   >
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: 'var(--text-dark)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={canViewVacancy}
-                        disabled={saving}
-                        onChange={e =>
-                          updateAccess(user.id, {
-                            can_view_vacancy: e.target.checked,
-                            can_view_submissions: e.target.checked
-                              ? canViewSubmissions
-                              : false,
-                            can_view_documents: e.target.checked
-                              ? canViewDocuments
-                              : false,
-                          })
-                        }
-                      />
-                      View vacancy
-                    </label>
-
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: 'var(--text-dark)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={canViewSubmissions}
-                        disabled={saving}
-                        onChange={e =>
-                          updateAccess(user.id, {
-                            can_view_submissions: e.target.checked,
-                          })
-                        }
-                      />
-                      View submitted candidates
-                    </label>
-
-                    <label
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: 'var(--text-dark)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={canViewDocuments}
-                        disabled={saving}
-                        onChange={e =>
-                          updateAccess(user.id, {
-                            can_view_documents: e.target.checked,
-                          })
-                        }
-                      />
-                      View documents
-                    </label>
-                  </div>
+                    {hasAccess
+                      ? 'This contact has full access to this vacancy, submitted candidates and document visibility.'
+                      : 'This contact does not currently have access to this vacancy.'}
+                  </p>
                 </div>
 
-                <span
-                  className="crm-badge"
+                <div
                   style={{
-                    background: canViewVacancy ? '#e8f5e8' : '#f0f0f2',
-                    color: canViewVacancy ? '#217822' : '#737373',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
                   }}
                 >
-                  {saving
-                    ? 'Saving...'
-                    : canViewVacancy
-                      ? 'Visible'
-                      : 'Hidden'}
-                </span>
+                  <span
+                    className="crm-badge"
+                    style={{
+                      background: hasAccess ? '#e8f5e8' : '#f0f0f2',
+                      color: hasAccess ? '#217822' : '#737373',
+                    }}
+                  >
+                    {saving ? 'Saving...' : hasAccess ? 'Full access' : 'No access'}
+                  </span>
+
+                  <button
+                    type="button"
+                    className={hasAccess ? 'crm-btn-ghost crm-btn-sm' : 'crm-btn-primary crm-btn-sm'}
+                    onClick={() => updateAccess(user.id, !hasAccess)}
+                    disabled={saving}
+                  >
+                    {saving
+                      ? 'Saving...'
+                      : hasAccess
+                        ? 'Remove access'
+                        : 'Grant full access'}
+                  </button>
+                </div>
               </div>
             )
           })}
