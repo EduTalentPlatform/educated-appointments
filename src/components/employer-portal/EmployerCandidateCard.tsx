@@ -1,11 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 type CandidateDocument = {
   id: string
   name: string
   doc_type: string | null
+  summary?: string | null
+  details?: any
   file_url: string | null
   storage_bucket?: string | null
   storage_path?: string | null
@@ -188,6 +190,63 @@ function documentHasStoredFile(document?: {
   )
 }
 
+function cleanPortalDisplayValue(value: unknown) {
+  const cleaned = String(value ?? '').trim()
+  return cleaned.length > 0 ? cleaned : ''
+}
+
+function getDocumentDetailsValue(document: CandidateDocument | undefined, keys: string[]) {
+  const details = (document as any)?.details
+
+  if (!details || typeof details !== 'object') return ''
+
+  for (const key of keys) {
+    const value = cleanPortalDisplayValue(details[key])
+    if (value) return value
+  }
+
+  return ''
+}
+
+function getDbsDisplayValue(
+  candidate: Candidate | null,
+  dbsDocument: CandidateDocument | undefined,
+) {
+  const candidateValues = [
+    (candidate as any)?.dbs,
+    (candidate as any)?.dbs_status,
+    (candidate as any)?.dbs_check,
+    (candidate as any)?.dbs_check_status,
+    (candidate as any)?.dbs_certificate,
+    (candidate as any)?.dbs_notes,
+  ]
+
+  for (const value of candidateValues) {
+    const cleaned = cleanPortalDisplayValue(value)
+    if (cleaned) return cleaned
+  }
+
+  const detailsValue = getDocumentDetailsValue(dbsDocument, [
+    'dbs',
+    'dbs_status',
+    'status',
+    'result',
+    'note',
+    'notes',
+  ])
+
+  if (detailsValue) return detailsValue
+
+  const summary = cleanPortalDisplayValue(dbsDocument?.summary)
+  if (summary) return summary
+
+  const name = cleanPortalDisplayValue(dbsDocument?.name)
+  if (name && !/^dbs$/i.test(name)) return name
+
+  return ''
+}
+
+
 function employerCanSeeDocument(doc: {
   doc_type?: string | null
   show_in_employer_portal?: boolean | null
@@ -284,6 +343,9 @@ export default function EmployerCandidateCard({
     const [localStatus, setLocalStatus] = useState(application.status)
   const [resultMessage, setResultMessage] = useState<string | null>(null)
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null)
+  const [cvPreviewUrl, setCvPreviewUrl] = useState<string | null>(null)
+  const [loadingCvPreview, setLoadingCvPreview] = useState(false)
+  const [cvPreviewError, setCvPreviewError] = useState<string | null>(null)
 
   const candidateName = getCandidateName(candidate)
 
@@ -305,17 +367,89 @@ export default function EmployerCandidateCard({
     )
   }, [documents])
 
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCvPreview() {
+      if (!formattedCv || !documentHasStoredFile(formattedCv)) {
+        setCvPreviewUrl(null)
+        setCvPreviewError(null)
+        return
+      }
+
+      setLoadingCvPreview(true)
+      setCvPreviewError(null)
+
+      try {
+        const res = await fetch('/api/employer-portal/document-signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            document_id: formattedCv.id,
+            document_kind: 'candidate',
+            vacancy_id: vacancyId,
+            application_id: application.id,
+          }),
+        })
+
+        const data = await res.json().catch(() => null)
+
+        if (!res.ok || !data?.url) {
+          throw new Error(data?.error || 'Could not load CV preview.')
+        }
+
+        if (!cancelled) {
+          setCvPreviewUrl(data.url)
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setCvPreviewUrl(null)
+          setCvPreviewError(error?.message || 'Could not load CV preview.')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingCvPreview(false)
+        }
+      }
+    }
+
+    loadCvPreview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [formattedCv?.id, vacancyId, application.id])
+
+
   const documentsOnFile = useMemo(() => {
+    const portalDocumentTypes = new Set([
+      'qualification',
+      'qualifications',
+      'certificate',
+      'certificates',
+      'right_to_work',
+      'dbs',
+      'reference',
+      'references',
+      'other',
+    ])
+
     return documents.filter(doc => {
       const type = String(doc.doc_type || '').toLowerCase()
 
-      return (
-        type !== 'formatted_cv' &&
-        type !== 'cv' &&
-        documentHasStoredFile(doc)
-      )
+      return portalDocumentTypes.has(type)
     })
   }, [documents])
+
+  const dbsDocument = useMemo(() => {
+    return documents.find(doc => {
+      const type = String(doc.doc_type || '').toLowerCase()
+      return type === 'dbs'
+    })
+  }, [documents])
+
+  const dbsStatusForPortal = getDbsDisplayValue(candidate, dbsDocument)
 
   function getDocumentDisplayLabel(docType?: string | null) {
     const labels: Record<string, string> = {
@@ -334,8 +468,8 @@ export default function EmployerCandidateCard({
   }
 
   function canDownloadSupportingDocument(doc: CandidateDocument) {
-    // At this stage, employers can only download/open the CV.
-    // Supporting documents are shown as being on file, but are not downloadable.
+    // At this stage, employers can only open/download the CV.
+    // Supporting documents are listed as on file only.
     return false
   }
 
@@ -568,7 +702,7 @@ export default function EmployerCandidateCard({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
               gap: 10,
               marginBottom: 18,
             }}
@@ -576,6 +710,9 @@ export default function EmployerCandidateCard({
             <MiniFact label="Salary expected" value={candidate?.salary_expected} />
             <MiniFact label="Notice period" value={candidate?.notice_period} />
             <MiniFact label="Location" value={getCandidateLocation(candidate)} />
+            {dbsStatusForPortal ? (
+              <MiniFact label="DBS" value={dbsStatusForPortal} />
+            ) : null}
           </div>
 
           {interviewArranged && (
@@ -670,6 +807,158 @@ export default function EmployerCandidateCard({
               >
                 Candidate profile notes have not been added yet.
               </p>
+            )}
+          </section>
+
+          <section
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 18,
+              padding: 16,
+              marginBottom: 18,
+              background: '#ffffff',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    fontWeight: 900,
+                    color: 'var(--text-dark)',
+                  }}
+                >
+                  CV
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 3,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Preview of the Educated Appointments CV for this candidate.
+                </p>
+              </div>
+
+              {formattedCv && documentHasStoredFile(formattedCv) ? (
+                <button
+                  type="button"
+                  className="crm-btn-ghost crm-btn-sm"
+                  onClick={() => openEmployerDocument(formattedCv)}
+                  disabled={openingDocumentId === formattedCv.id}
+                  style={{ flexShrink: 0 }}
+                >
+                  {openingDocumentId === formattedCv.id
+                    ? 'Opening...'
+                    : 'Open in new tab'}
+                </button>
+              ) : null}
+            </div>
+
+            {formattedCv && documentHasStoredFile(formattedCv) ? (
+              <div>
+                {loadingCvPreview ? (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13,
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Loading CV preview...
+                  </p>
+                ) : cvPreviewUrl ? (
+                  <iframe
+                    src={cvPreviewUrl}
+                    title="CV preview"
+                    style={{
+                      width: '100%',
+                      height: 620,
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 16,
+                      background: '#ffffff',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      border: '1px solid var(--border-light)',
+                      borderRadius: 14,
+                      padding: 14,
+                      background: 'var(--light-bg)',
+                    }}
+                  >
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 13,
+                        color: 'var(--text-dark)',
+                        fontWeight: 800,
+                      }}
+                    >
+                      CV available
+                    </p>
+
+                    <p
+                      style={{
+                        margin: 0,
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {cvPreviewError ||
+                        'The CV could not be previewed inline. Please open it in a new tab.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  border: '1px solid var(--border-light)',
+                  borderRadius: 14,
+                  padding: 14,
+                  background: 'var(--light-bg)',
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 13,
+                    color: 'var(--text-dark)',
+                    fontWeight: 800,
+                  }}
+                >
+                  CV pending
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  The candidate CV has not been added yet.
+                </p>
+              </div>
             )}
           </section>
 
