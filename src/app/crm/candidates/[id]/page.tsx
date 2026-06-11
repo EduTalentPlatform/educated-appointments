@@ -70,18 +70,21 @@ export default async function CrmCandidatePage({ params }: Props) {
 
     supabase
       .from('candidate_documents')
-      .select(`
+            .select(`
         id,
         candidate_id,
         name,
         doc_type,
         file_url,
+        storage_bucket,
+        storage_path,
         released,
         released_at,
         summary,
         details,
         visibility,
         visible_to_employer,
+        show_in_employer_portal,
         created_at
       `)
       .eq('candidate_id', id)
