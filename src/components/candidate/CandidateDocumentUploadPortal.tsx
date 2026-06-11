@@ -385,16 +385,65 @@ export default function CandidateDocumentUploadPortal({
               </div>
 
               <div className="ea-policy-copy">
-                <ul className="ea-policy-list">
-                  {safeRequestedTypes.map(type => {
-                    const label =
-                      DOCUMENT_TYPES.find(item => item.value === type)?.label ||
-                      type
+  <ul className="ea-policy-list">
+    {safeRequestedTypes.map(type => {
+      const label =
+        DOCUMENT_TYPES.find(item => item.value === type)?.label ||
+        type
 
-                    return <li key={type}>{label}</li>
-                  })}
-                </ul>
-              </div>
+      return <li key={type}>{label}</li>
+    })}
+  </ul>
+
+  <div
+    style={{
+      marginTop: 18,
+      padding: 18,
+      borderRadius: 18,
+      background: '#f8fafc',
+      border: '1px solid #e5e7eb',
+    }}
+  >
+    <p
+      style={{
+        margin: 0,
+        marginBottom: 10,
+        fontSize: 15,
+        fontWeight: 900,
+        color: '#17172f',
+      }}
+    >
+      Why we ask for these documents
+    </p>
+
+    <ul
+      style={{
+        margin: 0,
+        paddingLeft: 20,
+        fontSize: 14,
+        lineHeight: 1.8,
+        color: '#5f6170',
+      }}
+    >
+      <li>
+        <strong>Certificates / qualifications:</strong> these help us confirm
+        your occupational competency for relevant roles.
+      </li>
+      <li>
+        <strong>Right to work:</strong> we are legally required to confirm your
+        right to work in the UK.
+      </li>
+      <li>
+        <strong>DBS:</strong> only upload this if you already have one.
+      </li>
+      <li>
+        <strong>References:</strong> these are normally needed once you are
+        placed. Nobody will be contacted until you have accepted an offer from
+        your new employer.
+      </li>
+    </ul>
+  </div>
+</div>
             </section>
           )}
 
