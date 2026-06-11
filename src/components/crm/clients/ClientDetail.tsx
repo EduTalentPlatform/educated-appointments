@@ -204,14 +204,14 @@ export default function ClientDetail({
   const [sites, setSites] = useState(initialSites)
 const [activities, setActivities] = useState(initialActivities)
 const [activeTab, setActiveTab] = useState<
-  | 'activity'
   | 'overview'
   | 'terms'
   | 'vacancies'
   | 'placements'
   | 'documents'
   | 'portal'
->('activity')
+  | 'activity'
+>('overview')
 
   // Activity state
 const [actType, setActType] = useState('call')
@@ -675,15 +675,15 @@ async function deleteSite(id: string) {
 
       {/* ── TABS ────────────────────────────────────────────────────────────── */}
       <div className="crm-tabs">
-  {[
-  { id: 'activity', label: `☰ Activity (${activities.length})` },
+ {[
   { id: 'overview', label: '◉ Overview' },
   { id: 'terms', label: '📋 Terms & Fees' },
-    { id: 'vacancies', label: `◫ Vacancies (${vacancies.length})` },
-    { id: 'placements', label: `✓ Placements (${placements.length})` },
-    { id: 'documents', label: '📄 Documents' },
-    { id: 'portal', label: '🔑 Portal Access' },
-  ].map(t => (
+  { id: 'vacancies', label: `◫ Vacancies (${vacancies.length})` },
+  { id: 'placements', label: `✓ Placements (${placements.length})` },
+  { id: 'documents', label: '📄 Documents' },
+  { id: 'portal', label: '🔑 Portal Access' },
+  { id: 'activity', label: `☰ Activity (${activities.length})` },
+].map(t => (
     <button
       key={t.id}
       className={`crm-tab${activeTab === t.id ? ' active' : ''}`}
