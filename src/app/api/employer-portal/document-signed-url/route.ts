@@ -378,8 +378,15 @@ export async function POST(request: Request) {
       return createDocumentResponse({ supabase, document })
     }
 
+    const { data: placementForApplication } = await supabase
+      .from('placements')
+      .select('id')
+      .eq('application_id', application.id)
+      .maybeSingle()
+
     const isPlacedApplication =
-      normaliseDocType(application.status) === 'placed'
+      normaliseDocType(application.status) === 'placed' ||
+      Boolean(placementForApplication?.id)
 
     if (isPlacedApplication && access.can_view_submissions === true) {
       return createDocumentResponse({ supabase, document })

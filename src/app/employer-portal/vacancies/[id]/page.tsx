@@ -260,6 +260,24 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
     })
     .filter(Boolean)
 
+  const applicationIds = submittedApplications
+    .map((application: any) => application?.id)
+    .filter(Boolean)
+
+  const { data: portalPlacements } =
+    applicationIds.length > 0
+      ? await supabase
+          .from('placements')
+          .select('id, application_id')
+          .in('application_id', applicationIds)
+      : { data: [] }
+
+  const placedApplicationIds = new Set(
+    (portalPlacements ?? [])
+      .map((placement: any) => placement.application_id)
+      .filter(Boolean),
+  )
+
   const { data: documents } =
     candidateIds.length > 0
       ? await supabase
@@ -465,7 +483,8 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
                 : []
 
               const isPlacedApplication =
-                String(application.status || '').toLowerCase() === 'placed'
+                String(application.status || '').toLowerCase() === 'placed' ||
+                placedApplicationIds.has(application.id)
 
               const safeDocuments = sanitizePortalDocuments(
                 candidateDocuments,
