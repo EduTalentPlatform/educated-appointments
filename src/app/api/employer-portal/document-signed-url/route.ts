@@ -138,9 +138,18 @@ function candidateDocumentCanBeViewedByEmployer(document: any) {
     document.visible_to_employer === true &&
     document.released === true
 
-  // Formatted CVs / candidate profiles can be available before offer,
-  // because these are the employer-facing submission documents.
-  if (PRE_RELEASE_EMPLOYER_DOC_TYPES.has(docType)) {
+  // The formatted CV is the employer-facing submission document.
+  // Once an employer has access to the submitted candidate, they can view this
+  // before offer. Supporting evidence remains locked unless deliberately released.
+  if (docType === 'formatted_cv') {
+    return true
+  }
+
+  if (docType === 'candidate_profile' || docType === 'profile') {
+    return document.show_in_employer_portal === true || isReleased
+  }
+
+  if (docType === 'interview_prep') {
     return document.show_in_employer_portal === true || isReleased
   }
 

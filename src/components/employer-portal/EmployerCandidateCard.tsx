@@ -358,12 +358,10 @@ export default function EmployerCandidateCard({
     const formattedCv = useMemo(() => {
     return (
       documents.find(
-        doc => doc.doc_type === 'formatted_cv' && documentHasStoredFile(doc),
-      ) ||
-      documents.find(
-        doc => doc.doc_type === 'cv' && documentHasStoredFile(doc),
-      ) ||
-      null
+        doc =>
+          String(doc.doc_type || '').toLowerCase() === 'formatted_cv' &&
+          documentHasStoredFile(doc),
+      ) || null
     )
   }, [documents])
 
@@ -810,157 +808,7 @@ export default function EmployerCandidateCard({
             )}
           </section>
 
-          <section
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 18,
-              padding: 16,
-              marginBottom: 18,
-              background: '#ffffff',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <div>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 15,
-                    fontWeight: 900,
-                    color: 'var(--text-dark)',
-                  }}
-                >
-                  CV
-                </p>
 
-                <p
-                  style={{
-                    margin: 0,
-                    marginTop: 3,
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Preview of the Educated Appointments CV for this candidate.
-                </p>
-              </div>
-
-              {formattedCv && documentHasStoredFile(formattedCv) ? (
-                <button
-                  type="button"
-                  className="crm-btn-ghost crm-btn-sm"
-                  onClick={() => openEmployerDocument(formattedCv)}
-                  disabled={openingDocumentId === formattedCv.id}
-                  style={{ flexShrink: 0 }}
-                >
-                  {openingDocumentId === formattedCv.id
-                    ? 'Opening...'
-                    : 'Open in new tab'}
-                </button>
-              ) : null}
-            </div>
-
-            {formattedCv && documentHasStoredFile(formattedCv) ? (
-              <div>
-                {loadingCvPreview ? (
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 13,
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    Loading CV preview...
-                  </p>
-                ) : cvPreviewUrl ? (
-                  <iframe
-                    src={cvPreviewUrl}
-                    title="CV preview"
-                    style={{
-                      width: '100%',
-                      height: 620,
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 16,
-                      background: '#ffffff',
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      border: '1px solid var(--border-light)',
-                      borderRadius: 14,
-                      padding: 14,
-                      background: 'var(--light-bg)',
-                    }}
-                  >
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 13,
-                        color: 'var(--text-dark)',
-                        fontWeight: 800,
-                      }}
-                    >
-                      CV available
-                    </p>
-
-                    <p
-                      style={{
-                        margin: 0,
-                        marginTop: 4,
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {cvPreviewError ||
-                        'The CV could not be previewed inline. Please open it in a new tab.'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div
-                style={{
-                  border: '1px solid var(--border-light)',
-                  borderRadius: 14,
-                  padding: 14,
-                  background: 'var(--light-bg)',
-                }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 13,
-                    color: 'var(--text-dark)',
-                    fontWeight: 800,
-                  }}
-                >
-                  CV pending
-                </p>
-
-                <p
-                  style={{
-                    margin: 0,
-                    marginTop: 4,
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  The candidate CV has not been added yet.
-                </p>
-              </div>
-            )}
-          </section>
 
           <section
             style={{
@@ -1141,7 +989,7 @@ export default function EmployerCandidateCard({
               Arrange interview
             </button>
 
-                        {formattedCv && canDownloadDocuments && (
+                        {formattedCv && documentHasStoredFile(formattedCv) && (
               <button
                 type="button"
                 onClick={() => openEmployerDocument(formattedCv)}
@@ -1557,7 +1405,7 @@ export default function EmployerCandidateCard({
                 </p>
               </div>
 
-                            {formattedCv && canDownloadDocuments && (
+                            {formattedCv && documentHasStoredFile(formattedCv) && (
                 <button
                   type="button"
                   onClick={() => openEmployerDocument(formattedCv)}
@@ -1598,71 +1446,83 @@ export default function EmployerCandidateCard({
                 padding: 24,
               }}
             >
-              {formattedCv ? (
+              {formattedCv && documentHasStoredFile(formattedCv) ? (
                 <div>
-                  <p style={{ fontSize: 42, marginBottom: 10 }}>📄</p>
-
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 15,
-                      fontWeight: 900,
-                      color: 'var(--white)',
-                    }}
-                  >
-                    CV available
-                  </p>
-
-                  <p
-                    style={{
-                      margin: 0,
-                      marginTop: 7,
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      color: 'rgba(255,255,255,0.60)',
-                    }}
-                  >
-                    Open the secure document link in a new tab.
-                  </p>
-
-                  {canDownloadDocuments && (
-                    <button
-                      type="button"
-                      onClick={() => openEmployerDocument(formattedCv)}
-                      disabled={openingDocumentId === formattedCv.id}
+                  {loadingCvPreview ? (
+                    <p
                       style={{
-                        marginTop: 14,
-                        border: 0,
-                        display: 'inline-flex',
-                        background: 'var(--teal)',
-                        color: 'var(--text-dark)',
-                        borderRadius: 10,
-                        padding: '10px 13px',
-                        fontFamily: 'inherit',
-                        fontSize: 12,
-                        fontWeight: 900,
-                        cursor:
-                          openingDocumentId === formattedCv.id
-                            ? 'wait'
-                            : 'pointer',
+                        margin: 0,
+                        fontSize: 13,
+                        color: 'rgba(255,255,255,0.72)',
+                        lineHeight: 1.6,
                       }}
                     >
-                      {openingDocumentId === formattedCv.id
-                        ? 'Opening...'
-                        : 'Open CV'}
-                    </button>
+                      Loading CV preview...
+                    </p>
+                  ) : cvPreviewUrl ? (
+                    <iframe
+                      src={cvPreviewUrl}
+                      title="CV preview"
+                      style={{
+                        width: '100%',
+                        height: 720,
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        borderRadius: 18,
+                        background: '#ffffff',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        borderRadius: 18,
+                        padding: 18,
+                        background: 'rgba(255,255,255,0.08)',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 15,
+                          color: '#ffffff',
+                          fontWeight: 900,
+                        }}
+                      >
+                        CV available
+                      </p>
+
+                      <p
+                        style={{
+                          margin: 0,
+                          marginTop: 6,
+                          fontSize: 12,
+                          color: 'rgba(255,255,255,0.68)',
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {cvPreviewError ||
+                          'The CV could not be previewed inline. Please open it in a new tab.'}
+                      </p>
+                    </div>
                   )}
                 </div>
               ) : (
-                <div>
-                  <p style={{ fontSize: 38, marginBottom: 10 }}>📄</p>
-
+                <div
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    borderRadius: 18,
+                    padding: 18,
+                    background: 'rgba(255,255,255,0.08)',
+                    textAlign: 'center',
+                  }}
+                >
                   <p
                     style={{
                       margin: 0,
                       fontSize: 15,
+                      color: '#ffffff',
                       fontWeight: 900,
-                      color: 'var(--white)',
                     }}
                   >
                     CV pending
@@ -1671,14 +1531,13 @@ export default function EmployerCandidateCard({
                   <p
                     style={{
                       margin: 0,
-                      marginTop: 7,
+                      marginTop: 6,
                       fontSize: 12,
+                      color: 'rgba(255,255,255,0.68)',
                       lineHeight: 1.6,
-                      color: 'rgba(255,255,255,0.60)',
                     }}
                   >
-                    The Educated Appointments CV has not been added
-                    yet.
+                    The Educated Appointments CV has not been added yet.
                   </p>
                 </div>
               )}
