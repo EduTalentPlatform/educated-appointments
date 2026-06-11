@@ -576,7 +576,7 @@ async function openSecureDocument(
 export default function ApplicationDetail({
 
   application: initial,
-  documents,
+  documents: initialDocuments,
   vacancyDocuments = [],
   activities,
   aiReview: initialAiReview = null,
@@ -587,6 +587,8 @@ export default function ApplicationDetail({
 }: Props) {
 
   const [app, setApp] = useState(initial)
+  const [documents, setDocuments] =
+    useState<CandidateDocument[]>(initialDocuments)
   const [availableStandards, setAvailableStandards] =
   useState<ApprenticeshipStandard[]>(standards)
 
@@ -679,9 +681,99 @@ const [rolePortalRequestedDocuments, setRolePortalRequestedDocuments] = useState
 ])
 const [rolePortalMessage, setRolePortalMessage] = useState('')
 
+const [candidateDocumentUploadOpen, setCandidateDocumentUploadOpen] =
+  useState(false)
+const [candidateDocumentUploadName, setCandidateDocumentUploadName] =
+  useState('')
+const [candidateDocumentUploadType, setCandidateDocumentUploadType] =
+  useState('qualification')
+const [candidateDocumentUploadFile, setCandidateDocumentUploadFile] =
+  useState<File | null>(null)
+const [uploadingCandidateDocument, setUploadingCandidateDocument] =
+  useState(false)
+const [candidateDocumentUploadMessage, setCandidateDocumentUploadMessage] =
+  useState<string | null>(null)
+const [candidateDocumentUploadError, setCandidateDocumentUploadError] =
+  useState<string | null>(null)
+
   const c = app.candidates
   const v = app.vacancies
   const client = Array.isArray(v?.clients) ? v?.clients?.[0] : v?.clients
+
+async function uploadCandidateDocumentFromApplication(event: React.FormEvent) {
+  event.preventDefault()
+
+  if (!c?.id) {
+    setCandidateDocumentUploadError(
+      'This application is not linked to a candidate.',
+    )
+    return
+  }
+
+  if (!candidateDocumentUploadFile) {
+    setCandidateDocumentUploadError('Please choose a file to upload.')
+    return
+  }
+
+  setUploadingCandidateDocument(true)
+  setCandidateDocumentUploadMessage(null)
+  setCandidateDocumentUploadError(null)
+
+  const formData = new FormData()
+  formData.append('candidate_id', c.id)
+  formData.append('application_id', app.id)
+  formData.append('doc_type', candidateDocumentUploadType)
+  formData.append('name', candidateDocumentUploadName.trim())
+  formData.append('file', candidateDocumentUploadFile)
+
+  try {
+    const res = await fetch('/api/crm/candidate-document-upload', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      throw new Error(json?.error || 'Could not upload candidate document.')
+    }
+
+    if (json?.data) {
+      setDocuments(current => [json.data, ...current])
+    }
+
+    setCandidateDocumentUploadName('')
+    setCandidateDocumentUploadFile(null)
+    setCandidateDocumentUploadType('qualification')
+    setCandidateDocumentUploadMessage(
+      'Candidate document uploaded and saved to the candidate record.',
+    )
+
+    setActivityItems(current => [
+      {
+        id: `local-document-upload-${Date.now()}`,
+        activity_type: 'note',
+        content: [
+          'Candidate document uploaded from application.',
+          `Document: ${json?.data?.name || candidateDocumentUploadFile.name}`,
+          `Type: ${candidateDocumentUploadType.replace(/_/g, ' ')}`,
+          v?.title ? `Application: ${v.title}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        created_at: new Date().toISOString(),
+      },
+      ...current,
+    ])
+  } catch (error: any) {
+    setCandidateDocumentUploadError(
+      error?.message || 'Could not upload candidate document.',
+    )
+  } finally {
+    setUploadingCandidateDocument(false)
+  }
+}
+
 
   function buildRolePortalEmailPayload(previewOnly = false) {
   return {
@@ -2623,10 +2715,180 @@ Kind regards,`
 )}
       
       {activeTab === 'documents' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <DocumentGroupCard
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            className="crm-card"
+            style={{
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <p className="crm-card-title">Upload candidate document</p>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    marginTop: 4,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Upload documents from this application. They will be saved
+                  against the candidate record and linked back to this
+                  application.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="crm-btn-ghost crm-btn-sm"
+                onClick={() =>
+                  setCandidateDocumentUploadOpen(current => !current)
+                }
+              >
+                {candidateDocumentUploadOpen ? 'Hide upload' : '+ Upload document'}
+              </button>
+            </div>
+
+            {candidateDocumentUploadOpen && (
+              <form
+                onSubmit={uploadCandidateDocumentFromApplication}
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--border-light)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="crm-label">Document type</span>
+                    <select
+                      className="crm-select"
+                      value={candidateDocumentUploadType}
+                      onChange={event =>
+                        setCandidateDocumentUploadType(event.target.value)
+                      }
+                    >
+                      {APPLICATION_PORTAL_DOCUMENT_TYPES.map(type => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span className="crm-label">Document name</span>
+                    <input
+                      className="crm-input"
+                      value={candidateDocumentUploadName}
+                      onChange={event =>
+                        setCandidateDocumentUploadName(event.target.value)
+                      }
+                      placeholder="Optional — defaults to file name"
+                    />
+                  </label>
+                </div>
+
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span className="crm-label">File</span>
+                  <input
+                    type="file"
+                    className="crm-input"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                    onChange={event =>
+                      setCandidateDocumentUploadFile(
+                        event.target.files?.[0] ?? null,
+                      )
+                    }
+                  />
+                </label>
+
+                {candidateDocumentUploadError && (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12,
+                      color: '#dc2626',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {candidateDocumentUploadError}
+                  </p>
+                )}
+
+                {candidateDocumentUploadMessage && (
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12,
+                      color: '#217822',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {candidateDocumentUploadMessage}
+                  </p>
+                )}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="crm-btn-ghost"
+                    onClick={() => {
+                      setCandidateDocumentUploadOpen(false)
+                      setCandidateDocumentUploadName('')
+                      setCandidateDocumentUploadFile(null)
+                      setCandidateDocumentUploadError(null)
+                      setCandidateDocumentUploadMessage(null)
+                    }}
+                    disabled={uploadingCandidateDocument}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="crm-btn-primary"
+                    disabled={
+                      uploadingCandidateDocument || !candidateDocumentUploadFile
+                    }
+                  >
+                    {uploadingCandidateDocument
+                      ? 'Uploading...'
+                      : 'Upload to candidate'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <DocumentGroupCard
   title="Candidate documents"
-  empty="No candidate documents on file. Add them on the candidate profile."
+  empty="No candidate documents on file. Upload one above or add them on the candidate profile."
   documents={documents}
   documentKind="candidate"
 />
@@ -2638,6 +2900,7 @@ Kind regards,`
   documentKind="vacancy"
 />
 
+          </div>
         </div>
       )}
 

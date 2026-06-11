@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
 
     const candidateId = clean(formData.get('candidate_id'))
+    const applicationId = clean(formData.get('application_id')) || null
     const name = clean(formData.get('name'))
     const docType = normaliseDocType(formData.get('doc_type'))
     const file = formData.get('file') as File | null
@@ -150,6 +151,7 @@ export async function POST(request: NextRequest) {
       .from('candidate_documents')
       .insert({
         candidate_id: candidateId,
+        application_id: applicationId,
         name: name || file.name,
         doc_type: docType,
         file_url: null,
