@@ -81,6 +81,7 @@ const STAGE_COLOURS: Record<string, { bg: string; text: string }> = {
   ea_interview: { bg: '#e0f0fb', text: '#0B72B8' },
   docs_received: { bg: '#f3f0ff', text: '#7c3aed' },
   ready_to_present: { bg: '#fffbeb', text: '#d97706' },
+  submitted: { bg: '#e8f5e8', text: '#217822' },
   presented: { bg: '#e8f5e8', text: '#217822' },
   client_interview: { bg: '#f3f0ff', text: '#7c3aed' },
   offer: { bg: '#e8f5e8', text: '#1a6e1a' },
@@ -95,7 +96,7 @@ const LIVE_STAGES = [
   'ea_interview',
   'docs_received',
   'ready_to_present',
-  'presented',
+  'submitted',
   'client_interview',
   'offer',
 ]
@@ -119,7 +120,7 @@ const STARTING_STAGES = [
   { value: 'ea_interview', label: 'EA interview' },
   { value: 'docs_received', label: 'Docs received' },
   { value: 'ready_to_present', label: 'Ready to present' },
-  { value: 'presented', label: 'Presented' },
+  { value: 'submitted', label: 'Submitted' },
   { value: 'client_interview', label: 'Client interview' },
   { value: 'offer', label: 'Offer' },
 ]
@@ -509,7 +510,7 @@ export default function ApplicationsList({
               onClick={() => setStageFilter(stage)}
               style={{ whiteSpace: 'nowrap' }}
             >
-              {stage.replace(/_/g, ' ')} ({count})
+              {stage === 'submitted' || stage === 'presented' ? 'Submitted' : stage.replace(/_/g, ' ')} ({count})
             </button>
           )
         })}
@@ -579,7 +580,7 @@ export default function ApplicationsList({
                           color: STAGE_COLOURS[stage]?.text ?? '#737373',
                         }}
                       >
-                        {stage.replace(/_/g, ' ')}: {count}
+                        {stage === 'submitted' || stage === 'presented' ? 'Submitted' : stage.replace(/_/g, ' ')}: {count}
                       </span>
                     ))}
                   </div>

@@ -369,6 +369,11 @@ export default function EmployerCandidateCard({
   }
 
   async function rejectCandidate() {
+    if (!rejectReason.trim()) {
+      setResultMessage('Please provide a reason before rejecting this candidate.')
+      return
+    }
+
     const confirmed = confirm(
       `Reject ${candidateName}? This will notify Educated Appointments that you do not wish to progress this candidate.`,
     )

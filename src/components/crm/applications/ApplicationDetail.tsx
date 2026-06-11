@@ -493,7 +493,7 @@ const ALL_STAGES = [
   'ea_interview',
   'docs_received',
   'ready_to_present',
-  'presented',
+  'submitted',
   'client_interview',
   'offer',
   'placed',
@@ -507,13 +507,32 @@ const STAGE_COLOURS: Record<string, { bg: string; text: string }> = {
   ea_interview: { bg: '#e0f0fb', text: '#0B72B8' },
   docs_received: { bg: '#f3f0ff', text: '#7c3aed' },
   ready_to_present: { bg: '#fffbeb', text: '#d97706' },
-  presented: { bg: '#e8f5e8', text: '#217822' },
+  submitted: { bg: '#e8f5e8', text: '#217822' },
   client_interview: { bg: '#f3f0ff', text: '#7c3aed' },
   offer: { bg: '#e8f5e8', text: '#217822' },
   placed: { bg: '#e8f5e8', text: '#1a6e1a' },
   rejected: { bg: '#fef2f2', text: '#e53e3e' },
   not_interested: { bg: '#f0f0f2', text: '#737373' },
   withdrawn: { bg: '#f0f0f2', text: '#737373' },
+}
+
+function getApplicationStageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    screening: 'Screening',
+    ea_interview: 'EA interview',
+    docs_received: 'Docs received',
+    ready_to_present: 'Ready to submit',
+    submitted: 'Submitted',
+    presented: 'Submitted',
+    client_interview: 'Client interview',
+    offer: 'Offer',
+    placed: 'Placed',
+    rejected: 'Rejected',
+    not_interested: 'Not interested',
+    withdrawn: 'Withdrawn',
+  }
+
+  return labels[stage] || stage.replace(/_/g, ' ')
 }
 
 const INTERVIEW_FORMATS = [
@@ -2172,7 +2191,16 @@ Kind regards,`
   <select
               className="crm-select crm-select-sm"
               value={app.status}
-              onChange={e => patchApp({ status: e.target.value })}
+              onChange={e => {
+                const nextStatus = e.target.value
+
+                if (nextStatus === 'submitted') {
+                  setActiveTab('portal')
+                  return
+                }
+
+                patchApp({ status: nextStatus })
+              }}
               style={{
                 background: STAGE_COLOURS[app.status]?.bg,
                 color: STAGE_COLOURS[app.status]?.text,
@@ -2181,7 +2209,7 @@ Kind regards,`
             >
               {ALL_STAGES.map(stage => (
                 <option key={stage} value={stage}>
-                  {stage.replace(/_/g, ' ')}
+                  {getApplicationStageLabel(stage)}
                 </option>
               ))}
             </select>
@@ -2237,9 +2265,9 @@ Kind regards,`
             <button
               className="crm-btn-primary"
               style={{ background: '#217822' }}
-              onClick={() => patchApp({ status: 'presented' })}
+              onClick={() => setActiveTab('portal')}
             >
-              Present to client →
+              Review submission →
             </button>
           )}
         </div>
@@ -2985,9 +3013,10 @@ function PortalPresentationTab({
   savePortalCandidateFacts: () => Promise<void>
   savingPortalCandidateFacts: boolean
 }) {
-  const [savingOutcome, setSavingOutcome] = useState(false)
-  const [outcome, setOutcome] = useState(app.client_interview_outcome ?? '')
-  const [feedback, setFeedback] = useState(app.client_interview_feedback ?? '')
+  const [submittingToEmployerPortal, setSubmittingToEmployerPortal] =
+    useState(false)
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   const candidateName = `${c?.first_name ?? ''} ${c?.last_name ?? ''}`.trim()
 
@@ -3013,30 +3042,49 @@ function PortalPresentationTab({
     return 'unknown'
   }
 
-  async function markPresented() {
-    await saveAndFlash({
-      status: 'presented',
-      profile_sent_at: new Date().toISOString(),
-      employer_profile_notes: employerProfileNotes,
-    })
-  }
+  async function confirmAndSubmit() {
+    if (app.status === 'submitted') return
 
-  async function saveOutcome() {
-    setSavingOutcome(true)
+    setSubmittingToEmployerPortal(true)
+    setSubmissionMessage(null)
+    setSubmissionError(null)
 
-    const nextStatus =
-      outcome.toLowerCase().includes('not successful') ||
-      outcome.toLowerCase().includes('reject')
-        ? 'rejected'
-        : app.status
+    try {
+      await savePortalCandidateFacts()
 
-    await saveAndFlash({
-      status: nextStatus,
-      client_interview_outcome: outcome || null,
-      client_interview_feedback: feedback || null,
-    })
+      const res = await fetch('/api/crm/application/confirm-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          application_id: app.id,
+          employer_profile_notes: employerProfileNotes,
+        }),
+      })
 
-    setSavingOutcome(false)
+      const json = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        throw new Error(json?.error || 'Could not confirm submission.')
+      }
+
+      await saveAndFlash({
+        status: 'submitted',
+        profile_sent_at: new Date().toISOString(),
+        employer_profile_notes: employerProfileNotes,
+      })
+
+      setSubmissionMessage(
+        json?.notified && json.notified > 0
+          ? `Submitted and client notification sent to ${json.notified} portal user${json.notified === 1 ? '' : 's'}.`
+          : 'Submitted. No active portal notification recipient was found.',
+      )
+    } catch (error: any) {
+      setSubmissionError(
+        error?.message || 'Could not confirm and submit this candidate.',
+      )
+    } finally {
+      setSubmittingToEmployerPortal(false)
+    }
   }
 
   const formattedCvKind = getFileKind(formattedCv?.file_url)
@@ -3089,9 +3137,9 @@ function PortalPresentationTab({
             <button
               type="button"
               className="crm-btn-primary crm-btn-sm"
-              onClick={markPresented}
+              onClick={confirmAndSubmit}
             >
-              Mark as Presented
+              {app.status === 'submitted' ? 'Submitted' : 'Confirm and Submit'}
             </button>
           </div>
         </div>
@@ -3294,75 +3342,70 @@ function PortalPresentationTab({
           <div
             className="crm-card"
             style={{
-              border: '1.5px solid #bae6fd',
-              background: '#f0f9ff',
+              border: '1.5px solid #bbf7d0',
+              background: '#f0fdf4',
             }}
           >
-            <p className="crm-card-title" style={{ marginBottom: 12 }}>
-              Portal status and outcome
+            <p className="crm-card-title" style={{ marginBottom: 8 }}>
+              Confirm employer portal submission
             </p>
 
-            <div
+            <p
               style={{
-                display: 'grid',
-                gridTemplateColumns: '220px 1fr',
-                gap: 12,
-                marginBottom: 12,
+                margin: 0,
+                fontSize: 13,
+                color: 'var(--text-muted)',
+                lineHeight: 1.6,
               }}
             >
-              <div>
-                <label className="crm-label">Application status</label>
-                <select
-                  className="crm-select"
-                  value={app.status}
-                  onChange={event =>
-                    saveAndFlash({
-                      status: event.target.value,
-                    })
-                  }
-                >
-                  {ALL_STAGES.map(stage => (
-                    <option key={stage} value={stage}>
-                      {stage.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              Once confirmed, this candidate will be marked as Submitted, made
+              available in the employer portal and the client will be emailed a
+              link to sign in and review the submission.
+            </p>
 
-              <div>
-                <label className="crm-label">Client outcome</label>
-                <input
-                  className="crm-input"
-                  value={outcome}
-                  onChange={event => setOutcome(event.target.value)}
-                  placeholder="e.g. Awaiting feedback / Not successful / Offer to be made"
-                />
-              </div>
-            </div>
+            {submissionError && (
+              <p
+                style={{
+                  margin: '12px 0 0',
+                  fontSize: 12,
+                  color: '#dc2626',
+                  fontWeight: 800,
+                }}
+              >
+                {submissionError}
+              </p>
+            )}
 
-            <div>
-              <label className="crm-label">Client feedback / rejection reason</label>
-              <textarea
-                className="crm-input"
-                rows={4}
-                value={feedback}
-                onChange={event => setFeedback(event.target.value)}
-                placeholder="Employer feedback, rejection reason or next steps..."
-                style={{ lineHeight: 1.6 }}
-              />
-            </div>
+            {submissionMessage && (
+              <p
+                style={{
+                  margin: '12px 0 0',
+                  fontSize: 12,
+                  color: '#217822',
+                  fontWeight: 800,
+                }}
+              >
+                {submissionMessage}
+              </p>
+            )}
 
-            <div style={{ marginTop: 12, textAlign: 'right' }}>
+            <div style={{ marginTop: 14, textAlign: 'right' }}>
               <button
                 type="button"
-                className="crm-btn-primary crm-btn-sm"
-                onClick={saveOutcome}
-                disabled={savingOutcome}
+                className="crm-btn-primary"
+                style={{ background: '#217822' }}
+                onClick={confirmAndSubmit}
+                disabled={submittingToEmployerPortal || app.status === 'submitted'}
               >
-                {savingOutcome ? 'Saving...' : 'Save outcome'}
+                {submittingToEmployerPortal
+                  ? 'Submitting...'
+                  : app.status === 'submitted'
+                    ? 'Submitted'
+                    : 'Confirm and Submit'}
               </button>
             </div>
           </div>
+
         </div>
 
         <aside
@@ -3827,7 +3870,7 @@ function OverviewTab({
                       textTransform: 'capitalize',
                     }}
                   >
-                    {stage.replace(/_/g, ' ')}
+                    {getApplicationStageLabel(stage)}
                   </span>
                 </div>
               )

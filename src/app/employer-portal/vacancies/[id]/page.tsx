@@ -6,6 +6,7 @@ import EmployerPortalShell from '@/components/employer-portal/EmployerPortalShel
 import EmployerCandidateCard from '@/components/employer-portal/EmployerCandidateCard'
 
 const SUBMITTED_STATUSES = [
+  'submitted',
   'presented',
   'client_interview',
   'offer',
