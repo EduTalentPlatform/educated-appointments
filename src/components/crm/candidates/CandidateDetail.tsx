@@ -3466,6 +3466,32 @@ const selectedFileKind =
   )
   const selectedReferenceDetails = getReferenceDetails(selectedDocSafe)
 
+  const selectedGdprDetails =
+  selectedDocSafe?.doc_type === 'gdpr_acceptance'
+    ? selectedDocSafe.details ?? {}
+    : null
+
+const selectedGdprAcceptedAt =
+  selectedGdprDetails?.accepted_at ||
+  selectedGdprDetails?.signed_at ||
+  selectedDocSafe?.created_at ||
+  null
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '—'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('en-GB', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+}
+
   const isReferenceEntry = docForm.doc_type === 'reference'
   const referenceCanSave =
     referenceForm.referee_name.trim().length > 0 &&
@@ -4128,9 +4154,161 @@ const selectedFileKind =
     {selectedDocumentUrlError}
   </div>
 )}
-                  {selectedDocSafe.doc_type === 'reference' &&
-                  selectedReferenceDetails ? (
-                    <div style={{ padding: 18 }}>
+                  {selectedDocSafe.doc_type === 'gdpr_acceptance' ? (
+  <div style={{ padding: 18 }}>
+    <p className="crm-card-title" style={{ marginBottom: 10 }}>
+      GDPR acceptance evidence
+    </p>
+
+    <p
+      style={{
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        lineHeight: 1.5,
+        marginBottom: 14,
+      }}
+    >
+      This records when the candidate accepted the Candidate Privacy Notice.
+    </p>
+
+    <div className="crm-detail-list">
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Signed</span>
+        <span className="crm-detail-value">
+          {formatDateTime(selectedGdprAcceptedAt)}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">IP address</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.ip_address ||
+            selectedGdprDetails?.ipAddress ||
+            selectedGdprDetails?.ip ||
+            'Not recorded'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Candidate name</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.candidate_name ||
+            selectedGdprDetails?.typed_name ||
+            '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Candidate email</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.candidate_email ||
+            selectedGdprDetails?.typed_email ||
+            '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Policy version</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.policy_version || '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Privacy notice URL</span>
+        <span className="crm-detail-value" style={{ wordBreak: 'break-word' }}>
+          {selectedGdprDetails?.policy_url ? (
+            <a
+              href={selectedGdprDetails.policy_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="crm-detail-link"
+            >
+              Open privacy notice ↗
+            </a>
+          ) : (
+            '—'
+          )}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Read and understood</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.read_and_understood === true ? 'Yes' : '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Future opportunities consent</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.future_opportunities_consent === true
+            ? 'Yes'
+            : selectedGdprDetails?.future_opportunities_consent === false
+              ? 'No'
+              : '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">Vacancy updates consent</span>
+        <span className="crm-detail-value">
+          {selectedGdprDetails?.vacancy_updates_consent === true
+            ? 'Yes'
+            : selectedGdprDetails?.vacancy_updates_consent === false
+              ? 'No'
+              : '—'}
+        </span>
+      </div>
+
+      <div className="crm-detail-row">
+        <span className="crm-detail-label">User agent</span>
+        <span className="crm-detail-value" style={{ wordBreak: 'break-word' }}>
+          {selectedGdprDetails?.user_agent ||
+            selectedGdprDetails?.userAgent ||
+            'Not recorded'}
+        </span>
+      </div>
+    </div>
+
+    {selectedDocSafe.summary && (
+      <div
+        style={{
+          marginTop: 14,
+          padding: 12,
+          borderRadius: 12,
+          background: '#f8fafc',
+          border: '1px solid var(--border-light)',
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: 11,
+            fontWeight: 900,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+          }}
+        >
+          Summary
+        </p>
+        <p
+          style={{
+            margin: '6px 0 0',
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: 'var(--text-dark)',
+          }}
+        >
+          {selectedDocSafe.summary}
+        </p>
+      </div>
+    )}
+  </div>
+) : selectedDocSafe.doc_type === 'reference' &&
+selectedReferenceDetails ? (
+  <div style={{ padding: 18 }}>
                       <p className="crm-card-title" style={{ marginBottom: 10 }}>
                         Reference details
                       </p>
