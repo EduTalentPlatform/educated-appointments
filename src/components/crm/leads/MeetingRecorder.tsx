@@ -21,12 +21,39 @@ type Analysis = {
   conversion_reasoning: string
 }
 
+type MeetingActivityType = 'meeting' | 'bd_meeting'
+
+type RecorderDraft = {
+  content: string
+  bdForm: {
+    attendees: string
+    pain_points: string
+    roles_to_fill: string
+    psl_agencies: string
+    salary_notes: string
+    retention_notes: string
+    fee_agreed: string
+    decision_maker: string
+    next_steps: string
+    follow_up_date: string
+  }
+}
+
 interface Props {
   lead: Lead
   onActivitySaved: (activity: any) => void
+  activityType?: MeetingActivityType
+  embedded?: boolean
+  onDraftGenerated?: (draft: RecorderDraft) => void
 }
 
-export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
+export default function MeetingRecorder({
+  lead,
+  onActivitySaved,
+  activityType = 'bd_meeting',
+  embedded = false,
+  onDraftGenerated,
+}: Props) {
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [interimText, setInterimText] = useState('')
@@ -132,13 +159,50 @@ export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
     setAnalysing(false)
   }
 
-  async function saveAsBdMeeting() {
-    if (!analysis) return
-    const supabase = createClient()
-    const { data } = await supabase.from('lead_activities').insert({
-      lead_id: lead.id,
-      activity_type: 'bd_meeting',
-      content: analysis.overview,
+  function buildActivityContent(result: Analysis) {
+  return [
+    result.overview,
+    result.key_points?.length
+      ? `Key points:\n${result.key_points.map(point => `- ${point}`).join('\n')}`
+      : '',
+    result.next_steps ? `Next steps:\n${result.next_steps}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function buildRecorderDraft(result: Analysis): RecorderDraft {
+  return {
+    content: buildActivityContent(result),
+    bdForm: {
+      attendees: '',
+      pain_points: result.pain_points || '',
+      roles_to_fill: result.roles_to_fill || '',
+      psl_agencies: result.psl_agencies || '',
+      salary_notes: result.salary_notes || '',
+      retention_notes: result.retention_notes || '',
+      fee_agreed: result.fee_agreed || '',
+      decision_maker: result.decision_maker || '',
+      next_steps: result.next_steps || '',
+      follow_up_date: result.follow_up_date || '',
+    },
+  }
+}
+
+  async function saveMeetingActivity() {
+  if (!analysis) return
+
+  const supabase = createClient()
+
+  const payload: any = {
+    lead_id: lead.id,
+    activity_type: activityType,
+    direction: 'outbound',
+    content: buildActivityContent(analysis),
+  }
+
+  if (activityType === 'bd_meeting') {
+    Object.assign(payload, {
       pain_points: analysis.pain_points,
       roles_to_fill: analysis.roles_to_fill,
       psl_agencies: analysis.psl_agencies,
@@ -148,13 +212,36 @@ export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
       decision_maker: analysis.decision_maker,
       next_steps: analysis.next_steps,
       follow_up_date: analysis.follow_up_date,
-    }).select().single()
-
-    if (data) {
-      onActivitySaved(data)
-      setSaved(true)
-    }
+    })
   }
+
+  const { data, error } = await supabase
+    .from('lead_activities')
+    .insert(payload)
+    .select(
+      `
+      *,
+      lead_contacts (
+        id,
+        name,
+        title,
+        email,
+        phone
+      )
+    `,
+    )
+    .single()
+
+  if (error) {
+    setError(error.message || 'Could not save meeting.')
+    return
+  }
+
+  if (data) {
+    onActivitySaved(data)
+    setSaved(true)
+  }
+}
 
   return (
     <div className="crm-tab-content">
@@ -176,18 +263,18 @@ export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
           </div>
           <div className="ld-recorder-controls">
             {!isRecording ? (
-              <button className="ld-btn-record" onClick={startRecording} disabled={!supported}>
+              <button type="button" className="ld-btn-record" onClick={startRecording} disabled={!supported}>
                 <span className="ld-record-dot" />
                 Start recording
               </button>
             ) : (
-              <button className="ld-btn-stop" onClick={stopRecording}>
+              <button type="button" className="ld-btn-stop" onClick={stopRecording}>
                 <span className="ld-stop-square" />
                 Stop recording
               </button>
             )}
             {transcript && !isRecording && (
-              <button className="crm-btn-ghost crm-btn-sm" onClick={clearTranscript}>Clear</button>
+              <button type="button" className="crm-btn-ghost crm-btn-sm" onClick={clearTranscript}>Clear</button>
             )}
           </div>
         </div>
@@ -219,7 +306,7 @@ export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
       {error && <p style={{ fontSize: 13, color: '#e53e3e', fontWeight: 600 }}>{error}</p>}
 
       {transcript && !isRecording && (
-        <button className="crm-btn-ai" onClick={analyseTranscript} disabled={analysing}>
+        <button type="button" className="crm-btn-ai" onClick={analyseTranscript} disabled={analysing}>
           {analysing ? '✦ Analysing...' : '✦ Analyse with AI'}
         </button>
       )}
@@ -230,12 +317,31 @@ export default function MeetingRecorder({ lead, onActivitySaved }: Props) {
           <div className="ld-analysis-header">
             <p className="ld-analysis-title">✦ Meeting Analysis</p>
             {!saved ? (
-              <button className="crm-btn-primary crm-btn-sm" onClick={saveAsBdMeeting}>
-                Save as BD Meeting →
-              </button>
-            ) : (
-              <span className="crm-badge" style={{ background: '#e8f5e8', color: '#217822' }}>✓ Saved to activity log</span>
-            )}
+  embedded && onDraftGenerated ? (
+    <button
+      type="button"
+      className="crm-btn-primary crm-btn-sm"
+      onClick={() => onDraftGenerated(buildRecorderDraft(analysis))}
+    >
+      Use notes in form →
+    </button>
+  ) : (
+    <button
+      type="button"
+      className="crm-btn-primary crm-btn-sm"
+      onClick={saveMeetingActivity}
+    >
+      Save as {activityType === 'bd_meeting' ? 'BD Meeting' : 'Meeting'} →
+    </button>
+  )
+) : (
+  <span
+    className="crm-badge"
+    style={{ background: '#e8f5e8', color: '#217822' }}
+  >
+    ✓ Saved to activity log
+  </span>
+)}
           </div>
 
           {/* Overview */}
