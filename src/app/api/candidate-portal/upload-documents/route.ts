@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import PDFDocument from 'pdfkit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -66,10 +65,6 @@ function parseMetadata(value: FormDataEntryValue | null) {
   } catch {
     return {}
   }
-}
-
-function candidateName(candidate: any) {
-  return `${candidate?.first_name ?? ''} ${candidate?.last_name ?? ''}`.trim()
 }
 
 function buildDocumentDetails({
@@ -254,125 +249,42 @@ function validateReferences(references: ReferenceInput[]) {
   return null
 }
 
-function pdfRow(doc: PDFKit.PDFDocument, label: string, value: string) {
-  doc.font('Helvetica-Bold').text(label)
-  doc.font('Helvetica').text(value || 'Not provided')
-  doc.moveDown(0.7)
-}
-
-function createReferencePdfBuffer({
-  candidateDisplayName,
-  reference,
-  referenceNumber,
-}: {
-  candidateDisplayName: string
-  reference: ReferenceInput
-  referenceNumber: number
-}) {
-  return new Promise<Buffer>((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: 'A4',
-      margin: 50,
-    })
-
-    const chunks: Buffer[] = []
-
-    doc.on('data', chunk => chunks.push(Buffer.from(chunk)))
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
-
-    doc.font('Helvetica-Bold').fontSize(20).text('Candidate Reference Details')
-    doc.moveDown(0.5)
-
-    doc.font('Helvetica').fontSize(11).text('Educated Appointments CRM')
-    doc.text(`Generated: ${new Date().toLocaleString('en-GB')}`)
-    doc.moveDown(1.2)
-
-    doc.font('Helvetica-Bold').fontSize(13).text('Candidate')
-    doc.moveDown(0.4)
-    pdfRow(doc, 'Candidate name', candidateDisplayName || 'Candidate')
-    pdfRow(doc, 'Reference number', String(referenceNumber))
-    doc.moveDown(0.5)
-
-    doc.font('Helvetica-Bold').fontSize(13).text('Referee details')
-    doc.moveDown(0.4)
-
-    doc.fontSize(11)
-    pdfRow(doc, 'Referee name', reference.referee_name)
-    pdfRow(doc, 'Job title', reference.referee_job_title)
-    pdfRow(doc, 'Organisation', reference.organisation)
-    pdfRow(doc, 'Relationship to candidate', reference.relationship)
-    pdfRow(doc, 'Reference type', reference.reference_type)
-    pdfRow(doc, 'Email', reference.email)
-    pdfRow(doc, 'Phone', reference.phone)
-    pdfRow(doc, 'Notes', reference.notes)
-
-    doc.moveDown(1)
-    doc
-      .font('Helvetica-Oblique')
-      .fontSize(9)
-      .text(
-        'This document was generated from reference details supplied by the candidate through the Educated Appointments candidate portal.',
-      )
-
-    doc.end()
-  })
-}
-
 async function createReferenceDocument({
   supabase,
   candidateId,
   uploadLinkId,
-  candidateDisplayName,
   reference,
   referenceNumber,
 }: {
   supabase: ReturnType<typeof getServiceClient>
   candidateId: string
   uploadLinkId: string
-  candidateDisplayName: string
   reference: ReferenceInput
   referenceNumber: number
 }) {
-  const pdfBuffer = await createReferencePdfBuffer({
-    candidateDisplayName,
-    reference,
-    referenceNumber,
-  })
-
-  const cleanRefereeName = safeFileName(reference.referee_name || 'reference')
-  const fileName = `Reference ${referenceNumber} - ${reference.referee_name || 'Referee'}.pdf`
-  const filePath = `${candidateId}/${Date.now()}-reference-${referenceNumber}-${cleanRefereeName}.pdf`
-
-  const { error: uploadError } = await supabase.storage
-    .from(CANDIDATE_DOCUMENT_BUCKET)
-    .upload(filePath, pdfBuffer, {
-      contentType: 'application/pdf',
-      upsert: false,
-    })
-
-  if (uploadError) {
-    throw new Error(uploadError.message)
-  }
-
   const details = {
     source: 'candidate_upload_portal',
     upload_link_id: uploadLinkId,
     reference_number: referenceNumber,
     submitted_at: new Date().toISOString(),
+    status: 'not_requested',
     ...reference,
   }
+
+  const documentName = `Reference ${referenceNumber} - ${
+    reference.referee_name || 'Referee'
+  }`
 
   const { data, error: insertError } = await supabase
     .from('candidate_documents')
     .insert({
       candidate_id: candidateId,
       source_upload_link_id: uploadLinkId,
-      name: fileName,
+      name: documentName,
       doc_type: 'reference',
       file_url: null,
-      storage_bucket: CANDIDATE_DOCUMENT_BUCKET,
-      storage_path: filePath,
+      storage_bucket: null,
+      storage_path: null,
       show_in_employer_portal: false,
       visible_to_employer: false,
       released: false,
@@ -385,7 +297,6 @@ async function createReferenceDocument({
     .single()
 
   if (insertError) {
-    await supabase.storage.from(CANDIDATE_DOCUMENT_BUCKET).remove([filePath])
     throw new Error(insertError.message)
   }
 
@@ -465,14 +376,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: candidate } = await supabase
-      .from('candidates')
-      .select('id, first_name, last_name')
-      .eq('id', uploadLink.candidate_id)
-      .maybeSingle()
-
-    const candidateDisplayName = candidateName(candidate)
-
     if (docType === 'reference') {
       const references = getReferences(metadata)
       const referenceError = validateReferences(references)
@@ -485,13 +388,12 @@ export async function POST(request: NextRequest) {
 
       for (let index = 0; index < 2; index += 1) {
         const uploadedReference = await createReferenceDocument({
-          supabase,
-          candidateId: uploadLink.candidate_id,
-          uploadLinkId: uploadLink.id,
-          candidateDisplayName,
-          reference: references[index],
-          referenceNumber: index + 1,
-        })
+  supabase,
+  candidateId: uploadLink.candidate_id,
+  uploadLinkId: uploadLink.id,
+  reference: references[index],
+  referenceNumber: index + 1,
+})
 
         uploadedReferenceDocuments.push(uploadedReference)
       }

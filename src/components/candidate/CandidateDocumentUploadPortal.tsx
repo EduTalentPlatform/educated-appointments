@@ -583,153 +583,161 @@ export default function CandidateDocumentUploadPortal({
                 )}
 
                 {isReference ? (
-                  <div style={{ display: 'grid', gap: 18 }}>
-                    {[0, 1].map(index => {
-                      const reference = references[index]
+  <div style={{ display: 'grid', gap: 18 }}>
+    {[0, 1].map(index => {
+      const reference = references[index]
 
-                      return (
-                        <div
-                          key={index}
-                          className="ea-policy-note"
-                          style={{ display: 'grid', gap: 12 }}
-                        >
-                          <h3 style={{ margin: 0 }}>
-                            Reference {index + 1}
-                          </h3>
+      return (
+        <div
+          key={index}
+          className="ea-policy-note"
+          style={{
+            display: 'grid',
+            gap: 16,
+            padding: 22,
+            borderRadius: 18,
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 16,
+              fontWeight: 900,
+              color: '#17172f',
+            }}
+          >
+            Reference {index + 1}
+          </h3>
 
-                          <div className="candidate-declaration-fields">
-                            <label>
-                              Referee name
-                              <input
-                                type="text"
-                                value={reference.referee_name}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'referee_name',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 14,
+            }}
+          >
+            <label className="cp-field">
+              <span className="cp-label">Referee name</span>
+              <input
+                type="text"
+                className="cp-input"
+                value={reference.referee_name}
+                onChange={event =>
+                  updateReference(index, 'referee_name', event.target.value)
+                }
+                placeholder="e.g. Jane Smith"
+              />
+            </label>
 
-                            <label>
-                              Job title
-                              <input
-                                type="text"
-                                value={reference.referee_job_title}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'referee_job_title',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
+            <label className="cp-field">
+              <span className="cp-label">Job title</span>
+              <input
+                type="text"
+                className="cp-input"
+                value={reference.referee_job_title}
+                onChange={event =>
+                  updateReference(
+                    index,
+                    'referee_job_title',
+                    event.target.value,
+                  )
+                }
+                placeholder="e.g. Line Manager"
+              />
+            </label>
 
-                            <label>
-                              Organisation
-                              <input
-                                type="text"
-                                value={reference.organisation}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'organisation',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
+            <label className="cp-field">
+              <span className="cp-label">Organisation</span>
+              <input
+                type="text"
+                className="cp-input"
+                value={reference.organisation}
+                onChange={event =>
+                  updateReference(index, 'organisation', event.target.value)
+                }
+                placeholder="e.g. Previous employer"
+              />
+            </label>
 
-                            <label>
-                              Relationship to you
-                              <input
-                                type="text"
-                                value={reference.relationship}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'relationship',
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="e.g. Line manager"
-                              />
-                            </label>
+            <label className="cp-field">
+              <span className="cp-label">Relationship to you</span>
+              <input
+                type="text"
+                className="cp-input"
+                value={reference.relationship}
+                onChange={event =>
+                  updateReference(index, 'relationship', event.target.value)
+                }
+                placeholder="e.g. Line manager"
+              />
+            </label>
 
-                            <label>
-                              Email
-                              <input
-                                type="email"
-                                value={reference.email}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'email',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
+            <label className="cp-field">
+              <span className="cp-label">Email</span>
+              <input
+                type="email"
+                className="cp-input"
+                value={reference.email}
+                onChange={event =>
+                  updateReference(index, 'email', event.target.value)
+                }
+                placeholder="e.g. jane@example.com"
+              />
+            </label>
 
-                            <label>
-                              Phone
-                              <input
-                                type="tel"
-                                value={reference.phone}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'phone',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </label>
+            <label className="cp-field">
+              <span className="cp-label">Phone</span>
+              <input
+                type="text"
+                className="cp-input"
+                value={reference.phone}
+                onChange={event =>
+                  updateReference(index, 'phone', event.target.value)
+                }
+                placeholder="e.g. 07123 456789"
+              />
+            </label>
 
-                            <label>
-                              Reference type
-                              <select
-                                value={reference.reference_type}
-                                onChange={event =>
-                                  updateReference(
-                                    index,
-                                    'reference_type',
-                                    event.target.value,
-                                  )
-                                }
-                              >
-                                {REFERENCE_TYPES.map(type => (
-                                  <option key={type.value} value={type.value}>
-                                    {type.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
+            <label className="cp-field">
+              <span className="cp-label">Reference type</span>
+              <select
+                className="cp-select"
+                value={reference.reference_type}
+                onChange={event =>
+                  updateReference(index, 'reference_type', event.target.value)
+                }
+              >
+                {REFERENCE_TYPES.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-                          <label>
-                            Notes
-                            <textarea
-                              rows={3}
-                              value={reference.notes}
-                              onChange={event =>
-                                updateReference(
-                                  index,
-                                  'notes',
-                                  event.target.value,
-                                )
-                              }
-                              placeholder="Anything we should know about this reference?"
-                            />
-                          </label>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
+            <label className="cp-field" style={{ gridColumn: '1 / -1' }}>
+              <span className="cp-label">Notes</span>
+              <textarea
+                className="cp-input"
+                rows={4}
+                value={reference.notes}
+                onChange={event =>
+                  updateReference(index, 'notes', event.target.value)
+                }
+                placeholder="Anything we should know about this reference?"
+                style={{
+                  lineHeight: 1.6,
+                  resize: 'vertical',
+                  minHeight: 110,
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )
+    })}
+  </div>
+) : (
                   <div className="cp-field">
                     <label className="cp-label">Select file(s)</label>
                     <input
