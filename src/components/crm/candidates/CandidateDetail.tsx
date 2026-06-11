@@ -741,34 +741,11 @@ async function loadOverviewCvUrl(document: CandidateDocument | null) {
 
 async function openOverviewCvDocument() {
   if (overviewCvDocument && documentHasStoredFile(overviewCvDocument)) {
-    let url = overviewCvUrl
-
-    if (!url) {
-      setLoadingOverviewCvUrl(true)
-
-      const res = await fetch('/api/crm/document-signed-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          document_id: overviewCvDocument.id,
-          document_kind: 'candidate',
-        }),
-      })
-
-      const json = await res.json().catch(() => null)
-
-      setLoadingOverviewCvUrl(false)
-
-      if (!res.ok || !json?.url) {
-        alert(json?.error || 'Could not open this CV securely.')
-        return
-      }
-
-      url = json.url
-      setOverviewCvUrl(url)
-    }
-
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.open(
+      `/api/crm/document-preview?document_id=${overviewCvDocument.id}&document_kind=candidate`,
+      '_blank',
+      'noopener,noreferrer',
+    )
     return
   }
 
@@ -2346,8 +2323,9 @@ function OverviewTab({
     candidateRecord.postcode,
   ].filter(Boolean)
 
-  const cvPreviewUrl =
-  overviewCvUrl || overviewCvDocument?.file_url || candidateRecord.cv_url || ''
+  const cvPreviewUrl = overviewCvDocument
+  ? `/api/crm/document-preview?document_id=${overviewCvDocument.id}&document_kind=candidate`
+  : candidateRecord.cv_url || ''
 
 const cvPreviewKind =
   getOverviewPreviewFileKind(overviewCvDocument?.name) !== 'unknown'
