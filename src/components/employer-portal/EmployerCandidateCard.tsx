@@ -507,11 +507,8 @@ export default function EmployerCandidateCard({
   }
 
   function canDownloadSupportingDocument(doc: CandidateDocument) {
-    const isPlaced = localStatus === 'placed'
-
     return Boolean(
-      isPlaced &&
-        canDownloadDocuments &&
+      canDownloadDocuments &&
         (doc.file_url || (doc.storage_bucket && doc.storage_path)),
     )
   }

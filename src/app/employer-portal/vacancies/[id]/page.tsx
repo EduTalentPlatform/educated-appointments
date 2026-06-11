@@ -486,11 +486,13 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
                 String(application.status || '').toLowerCase() === 'placed' ||
                 placedApplicationIds.has(application.id)
 
-              const safeDocuments = sanitizePortalDocuments(
-                candidateDocuments,
-                access.can_view_submissions === true,
-                isPlacedApplication || access.can_view_documents === true,
-              )
+              const safeDocuments = isPlacedApplication
+                ? candidateDocuments
+                : sanitizePortalDocuments(
+                    candidateDocuments,
+                    access.can_view_submissions === true,
+                    false,
+                  )
 
               return (
                 <EmployerCandidateCard
@@ -499,7 +501,7 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
                   application={application}
                   candidate={candidate}
                   documents={safeDocuments}
-                  canDownloadDocuments={canViewDocuments}
+                  canDownloadDocuments={isPlacedApplication}
                 />
               )
             })}

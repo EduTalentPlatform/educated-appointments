@@ -355,6 +355,7 @@ export async function POST(request: Request) {
     }
 
     const docType = normaliseDocType(document.doc_type)
+
     const submittedStatuses = new Set([
       'submitted',
       'presented',
@@ -392,21 +393,11 @@ export async function POST(request: Request) {
       return createDocumentResponse({ supabase, document })
     }
 
-    if (access.can_view_documents !== true) {
-      return NextResponse.json(
-        { error: 'This document has not been released to the employer.' },
-        { status: 403 },
-      )
-    }
+    return NextResponse.json(
+      { error: 'This document has not been released to the employer.' },
+      { status: 403 },
+    )
 
-    if (!candidateDocumentCanBeViewedByEmployer(document)) {
-      return NextResponse.json(
-        { error: 'This document has not been released to the employer.' },
-        { status: 403 },
-      )
-    }
-
-    return createDocumentResponse({ supabase, document })
   } catch (error: any) {
     console.error('Employer portal document signed URL error:', error)
 
