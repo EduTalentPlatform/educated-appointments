@@ -255,17 +255,23 @@ export async function POST(request: Request) {
       .eq('portal_user_id', portalUser.id)
       .eq('vacancy_id', vacancyId)
       .eq('can_view_vacancy', true)
-      .eq('can_view_documents', true)
       .maybeSingle()
 
     if (!access) {
       return NextResponse.json(
-        { error: 'You do not have access to this document.' },
+        { error: 'You do not have access to this vacancy.' },
         { status: 403 },
       )
     }
 
     if (documentKind === 'vacancy') {
+      if (access.can_view_documents !== true) {
+        return NextResponse.json(
+          { error: 'You do not have access to this document.' },
+          { status: 403 },
+        )
+      }
+
       const { data: document, error } = await supabase
         .from('vacancy_documents')
         .select(
@@ -305,7 +311,7 @@ export async function POST(request: Request) {
 
     const { data: application } = await supabase
       .from('applications')
-      .select('id, vacancy_id, candidate_id')
+      .select('id, vacancy_id, candidate_id, status')
       .eq('id', applicationId)
       .eq('vacancy_id', vacancyId)
       .maybeSingle()
@@ -345,6 +351,37 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Document not found.' },
         { status: 404 },
+      )
+    }
+
+    const docType = normaliseDocType(document.doc_type)
+    const submittedStatuses = new Set([
+      'submitted',
+      'presented',
+      'client_interview',
+      'offer',
+      'placed',
+    ])
+
+    const isSubmittedApplication = submittedStatuses.has(
+      normaliseDocType(application.status),
+    )
+
+    if (docType === 'formatted_cv') {
+      if (access.can_view_submissions !== true || !isSubmittedApplication) {
+        return NextResponse.json(
+          { error: 'You do not have access to this CV.' },
+          { status: 403 },
+        )
+      }
+
+      return createDocumentResponse({ supabase, document })
+    }
+
+    if (access.can_view_documents !== true) {
+      return NextResponse.json(
+        { error: 'This document has not been released to the employer.' },
+        { status: 403 },
       )
     }
 
