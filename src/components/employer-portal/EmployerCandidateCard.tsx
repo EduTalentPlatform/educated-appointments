@@ -1094,10 +1094,11 @@ export default function EmployerCandidateCard({
                         display: 'flex',
                         justifyContent: 'space-between',
                         gap: 12,
-                        alignItems: 'center',
+                        alignItems: isReference ? 'stretch' : 'center',
+                        flexDirection: isReference ? 'column' : 'row',
                       }}
                     >
-                      <div style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, width: '100%', flex: 1 }}>
                         <p
                           style={{
                             margin: 0,
@@ -1127,40 +1128,38 @@ export default function EmployerCandidateCard({
                           <div
                             style={{
                               marginTop: 10,
+                              borderTop: '1px solid var(--border-light)',
+                              paddingTop: 10,
                               display: 'grid',
                               gridTemplateColumns:
-                                'repeat(auto-fit, minmax(150px, 1fr))',
-                              gap: 8,
+                                'repeat(auto-fit, minmax(220px, 1fr))',
+                              columnGap: 18,
+                              rowGap: 6,
                             }}
                           >
                             {referenceRows.map(row => (
                               <div
                                 key={`${doc.id}-${row.label}`}
                                 style={{
-                                  border: '1px solid var(--border-light)',
-                                  borderRadius: 10,
-                                  padding: '8px 9px',
-                                  background: 'var(--light-bg)',
+                                  display: 'grid',
+                                  gridTemplateColumns: '92px minmax(0, 1fr)',
+                                  gap: 8,
+                                  alignItems: 'baseline',
                                   minWidth: 0,
                                 }}
                               >
-                                <p
+                                <span
                                   style={{
-                                    margin: 0,
-                                    fontSize: 10,
+                                    fontSize: 11,
                                     color: 'var(--text-muted)',
-                                    fontWeight: 900,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 0.5,
+                                    fontWeight: 800,
                                   }}
                                 >
                                   {row.label}
-                                </p>
+                                </span>
 
-                                <p
+                                <span
                                   style={{
-                                    margin: 0,
-                                    marginTop: 3,
                                     fontSize: 12,
                                     color: 'var(--text-dark)',
                                     fontWeight: 800,
@@ -1168,8 +1167,8 @@ export default function EmployerCandidateCard({
                                     wordBreak: 'break-word',
                                   }}
                                 >
-                                  {row.value}
-                                </p>
+                                  {formatPortalFactValue(row.value)}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -1177,19 +1176,21 @@ export default function EmployerCandidateCard({
                       </div>
 
                       {isReference && referenceRows.length > 0 ? (
-                        <span
-                          style={{
-                            flexShrink: 0,
-                            borderRadius: 999,
-                            padding: '6px 10px',
-                            background: '#e8f5e8',
-                            color: '#217822',
-                            fontSize: 11,
-                            fontWeight: 900,
-                          }}
-                        >
-                          Details shown
-                        </span>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <span
+                            style={{
+                              flexShrink: 0,
+                              borderRadius: 999,
+                              padding: '6px 10px',
+                              background: '#e8f5e8',
+                              color: '#217822',
+                              fontSize: 11,
+                              fontWeight: 900,
+                            }}
+                          >
+                            Details shown
+                          </span>
+                        </div>
                       ) : canDownload ? (
                         <button
                           type="button"
