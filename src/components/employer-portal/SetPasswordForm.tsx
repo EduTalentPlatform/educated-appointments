@@ -101,6 +101,21 @@ export default function SetPasswordForm() {
       return
     }
 
+    const flagResponse = await fetch('/api/employer-portal/password-changed', {
+      method: 'POST',
+    })
+
+    const flagResult = await flagResponse.json().catch(() => null)
+
+    if (!flagResponse.ok) {
+      setError(
+        flagResult?.error ||
+          'Your password was updated, but we could not update your portal status. Please contact Educated Appointments.',
+      )
+      setSaving(false)
+      return
+    }
+
     setMessage('Password set successfully. Redirecting to the employer portal...')
 
     setTimeout(() => {
@@ -159,7 +174,7 @@ export default function SetPasswordForm() {
               lineHeight: 1.1,
             }}
           >
-            Set your password
+            Change your temporary password
           </h1>
 
           <p
@@ -171,8 +186,8 @@ export default function SetPasswordForm() {
               lineHeight: 1.7,
             }}
           >
-            Choose a secure password for your Educated Appointments employer
-            portal login.
+            For security, please choose your own password before accessing the
+            Educated Appointments employer portal.
           </p>
 
           {checking && (

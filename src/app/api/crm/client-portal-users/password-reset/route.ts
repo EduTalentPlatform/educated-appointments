@@ -112,6 +112,8 @@ export async function POST(request: Request) {
       .from('client_portal_users')
       .update({
         auth_user_id: authUserId,
+        must_change_password: true,
+        password_changed_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', portalUser.id)
@@ -129,6 +131,15 @@ export async function POST(request: Request) {
   if (resetError) {
     return NextResponse.json({ error: resetError.message }, { status: 400 })
   }
+
+  await supabase
+    .from('client_portal_users')
+    .update({
+      must_change_password: true,
+      password_changed_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', portalUser.id)
 
   return NextResponse.json({
     success: true,

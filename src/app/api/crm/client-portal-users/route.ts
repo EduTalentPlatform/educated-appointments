@@ -227,6 +227,8 @@ export async function POST(request: Request) {
       role,
       active: true,
       created_by: user.id,
+      must_change_password: true,
+      password_changed_at: null,
     })
     .select('*')
     .single()

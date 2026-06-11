@@ -72,6 +72,10 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
     redirect('/employer-portal/login')
   }
 
+  if (portalUser.must_change_password) {
+    redirect('/employer-portal/set-password?temporary=1')
+  }
+
   const { data: access } = await supabase
     .from('portal_vacancy_access')
     .select(

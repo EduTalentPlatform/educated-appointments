@@ -128,6 +128,10 @@ export default async function EmployerPortalDashboardPage() {
     )
   }
 
+  if (portalUser.must_change_password) {
+    redirect('/employer-portal/set-password?temporary=1')
+  }
+
   const client = normaliseRelation(portalUser.clients)
 
   const { data: accessRows } = await supabase
