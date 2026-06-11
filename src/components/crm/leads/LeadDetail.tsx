@@ -393,9 +393,12 @@ export default function LeadDetail({
   }
 
   async function updateStatus(status: string) {
+  const now = new Date().toISOString()
+
+  if (status !== 'converted') {
     const { error } = await supabase
       .from('leads')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ status, updated_at: now })
       .eq('id', lead.id)
 
     if (error) {
@@ -404,49 +407,142 @@ export default function LeadDetail({
     }
 
     setLead(current => ({ ...current, status }))
+    return
+  }
 
-    if (status === 'converted') {
-      const { data: client, error: clientError } = await supabase
-        .from('clients')
-        .insert({
-          lead_id: lead.id,
-          company_name: lead.company_name,
-          contact_name: primaryContact?.name ?? lead.contact_name,
-          email: primaryContact?.email ?? lead.email,
-          phone: primaryContact?.phone ?? lead.phone,
-          website: lead.website,
-          sector: lead.sector,
-          region: lead.region,
-          main_office_address_line_1: lead.main_office_address_line_1,
-          main_office_address_line_2: lead.main_office_address_line_2,
-          main_office_town_city: lead.main_office_town_city,
-          main_office_county: lead.main_office_county,
-          main_office_postcode: lead.main_office_postcode,
-          main_office_lat: lead.main_office_lat,
-          main_office_lng: lead.main_office_lng,
-        })
-        .select()
-        .single()
+  if (lead.status === 'converted' || Boolean((lead as any).client_id)) {
+    alert('This lead has already been converted to a client.')
+    return
+  }
 
-      if (clientError) {
-        alert(clientError.message || 'Lead status changed, but client was not created.')
-        return
-      }
+  const postcodeLookup = await lookupPostcode(lead.main_office_postcode)
 
-      if (client) {
-        await supabase
-          .from('leads')
-          .update({
-            client_id: client.id,
-            converted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', lead.id)
+  const { data: client, error: clientError } = await supabase
+    .from('clients')
+    .insert({
+      lead_id: lead.id,
+      company_name: lead.company_name,
+      contact_name: primaryContact?.name ?? lead.contact_name,
+      contact_title: primaryContact?.title ?? lead.contact_title,
+      email: primaryContact?.email ?? lead.email,
+      phone: primaryContact?.phone ?? lead.phone,
+      website: lead.website,
+      sector: lead.sector,
+      region: lead.region || postcodeLookup.region || null,
+      linkedin_company: lead.linkedin_company,
+      ukprn: lead.ukprn,
+      ofsted_grade: lead.ofsted_grade,
+      esfa_funding: lead.esfa_funding,
+      frameworks: lead.frameworks,
+      main_office_address_line_1: lead.main_office_address_line_1,
+      main_office_address_line_2: lead.main_office_address_line_2,
+      main_office_town_city:
+        lead.main_office_town_city || postcodeLookup.district || null,
+      main_office_county: lead.main_office_county,
+      main_office_postcode: lead.main_office_postcode,
+      main_office_lat: lead.main_office_lat ?? postcodeLookup.lat ?? null,
+      main_office_lng: lead.main_office_lng ?? postcodeLookup.lng ?? null,
+      notes: lead.notes,
+      status: 'active',
+    })
+    .select()
+    .single()
 
-        router.push(`/crm/clients/${client.id}`)
-      }
+  if (clientError) {
+    alert(clientError.message || 'Client was not created.')
+    return
+  }
+
+  if (!client) {
+    alert('Client was not created.')
+    return
+  }
+
+  const hasPrimaryContact = contacts.some(contact => contact.is_primary)
+
+  const contactsToCopy =
+    contacts.length > 0
+      ? contacts.map((contact, index) => ({
+          client_id: client.id,
+          name: contact.name,
+          title: contact.title,
+          email: contact.email,
+          phone: contact.phone,
+          linkedin: contact.linkedin,
+          role_type: contact.role_type || 'Day-to-day',
+          is_primary: contact.is_primary || (!hasPrimaryContact && index === 0),
+        }))
+      : lead.contact_name
+        ? [
+            {
+              client_id: client.id,
+              name: lead.contact_name,
+              title: lead.contact_title,
+              email: lead.email,
+              phone: lead.phone,
+              linkedin: lead.linkedin,
+              role_type: 'Day-to-day',
+              is_primary: true,
+            },
+          ]
+        : []
+
+  if (contactsToCopy.length > 0) {
+    const { error: contactsError } = await supabase
+      .from('client_contacts')
+      .insert(contactsToCopy)
+
+    if (contactsError) {
+      alert(
+        contactsError.message ||
+          'Client was created, but the lead contacts were not copied across.',
+      )
+      return
     }
   }
+
+  if (sites.length > 0) {
+    const { error: sitesError } = await supabase
+      .from('provider_sites')
+      .update({ client_id: client.id })
+      .eq('lead_id', lead.id)
+
+    if (sitesError) {
+      alert(
+        sitesError.message ||
+          'Client was created, but the provider locations were not linked to the client.',
+      )
+      return
+    }
+  }
+
+  const { error: leadUpdateError } = await supabase
+    .from('leads')
+    .update({
+      status: 'converted',
+      client_id: client.id,
+      converted_at: now,
+      updated_at: now,
+    })
+    .eq('id', lead.id)
+
+  if (leadUpdateError) {
+    alert(
+      leadUpdateError.message ||
+        'Client was created, but the lead was not marked as converted.',
+    )
+    return
+  }
+
+  setLead(current => ({
+    ...current,
+    status: 'converted',
+    client_id: client.id,
+    converted_at: now,
+  }))
+
+  router.push(`/crm/clients/${client.id}`)
+}
 
   async function saveLead() {
     if (!leadForm.company_name.trim()) {
@@ -2209,6 +2305,38 @@ export default function LeadDetail({
                     </select>
                   </div>
                 </div>
+
+                {(actType === 'meeting' || actType === 'bd_meeting') && (
+  <div style={{ marginBottom: 14 }}>
+    <MeetingRecorder
+      lead={lead}
+      activityType={actType as 'meeting' | 'bd_meeting'}
+      embedded
+      onActivitySaved={activity =>
+        setActivities(current => [activity, ...current])
+      }
+      onDraftGenerated={draft => {
+        setActContent(draft.content)
+
+        if (actType === 'bd_meeting') {
+          setBdForm(current => ({
+            ...current,
+            attendees: draft.bdForm.attendees || current.attendees,
+            pain_points: draft.bdForm.pain_points,
+            roles_to_fill: draft.bdForm.roles_to_fill,
+            psl_agencies: draft.bdForm.psl_agencies,
+            salary_notes: draft.bdForm.salary_notes,
+            retention_notes: draft.bdForm.retention_notes,
+            fee_agreed: draft.bdForm.fee_agreed,
+            decision_maker: draft.bdForm.decision_maker,
+            next_steps: draft.bdForm.next_steps,
+            follow_up_date: draft.bdForm.follow_up_date,
+          }))
+        }
+      }}
+    />
+  </div>
+)}
 
                 <textarea
   className="crm-input"
