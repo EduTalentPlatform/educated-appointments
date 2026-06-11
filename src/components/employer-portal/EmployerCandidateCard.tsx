@@ -66,7 +66,7 @@ function formatDocType(value?: string | null) {
 
   const labels: Record<string, string> = {
     cv: 'Original CV',
-    formatted_cv: 'Formatted CV',
+    formatted_cv: 'CV',
     qualification: 'Qualification',
     right_to_work: 'Right to work',
     dbs: 'DBS',
@@ -289,22 +289,48 @@ export default function EmployerCandidateCard({
   const isRejected = localStatus === 'rejected'
 
     const formattedCv = useMemo(() => {
-    return documents.find(
-      doc =>
-        doc.doc_type === 'formatted_cv' &&
-        documentHasStoredFile(doc) &&
-        employerCanSeeDocument(doc),
+    return (
+      documents.find(
+        doc => doc.doc_type === 'formatted_cv' && documentHasStoredFile(doc),
+      ) ||
+      documents.find(
+        doc => doc.doc_type === 'cv' && documentHasStoredFile(doc),
+      ) ||
+      null
     )
   }, [documents])
 
   const documentsOnFile = useMemo(() => {
-    return documents.filter(
-      doc =>
-        doc.doc_type !== 'formatted_cv' &&
-        documentHasStoredFile(doc) &&
-        employerCanSeeDocument(doc),
-    )
+    return documents.filter(doc => {
+      const type = String(doc.doc_type || '').toLowerCase()
+
+      return (
+        type !== 'formatted_cv' &&
+        type !== 'cv' &&
+        documentHasStoredFile(doc)
+      )
+    })
   }, [documents])
+
+  function getDocumentDisplayLabel(docType?: string | null) {
+    const labels: Record<string, string> = {
+      qualification: 'Qualification certificate',
+      certificate: 'Qualification certificate',
+      certificates: 'Qualification certificate',
+      right_to_work: 'Right to work',
+      dbs: 'DBS',
+      reference: 'Reference details',
+      interview_prep: 'Interview preparation',
+      gdpr_acceptance: 'GDPR / privacy acceptance',
+      other: 'Supporting document',
+    }
+
+    return labels[String(docType || '').toLowerCase()] || 'Supporting document'
+  }
+
+  function canDownloadSupportingDocument(doc: CandidateDocument) {
+    return Boolean(canDownloadDocuments && (doc.released || doc.visible_to_employer))
+  }
 
     async function openEmployerDocument(doc: CandidateDocument) {
     setOpeningDocumentId(doc.id)
@@ -675,18 +701,21 @@ export default function EmployerCandidateCard({
                     marginTop: 3,
                     fontSize: 12,
                     color: 'var(--text-muted)',
+                    lineHeight: 1.5,
                   }}
                 >
-                  Supporting documents held by Educated Appointments.
+                  Supporting documents held by Educated Appointments. Documents
+                  are listed here for visibility, but can only be downloaded
+                  once released.
                 </p>
               </div>
 
               <span
                 style={{
-                  background: 'var(--success-light)',
-                  color: 'var(--success)',
                   borderRadius: 999,
                   padding: '6px 10px',
+                  background: 'var(--light-bg)',
+                  color: 'var(--text-muted)',
                   fontSize: 11,
                   fontWeight: 900,
                   whiteSpace: 'nowrap',
@@ -696,42 +725,22 @@ export default function EmployerCandidateCard({
               </span>
             </div>
 
-            {documentsOnFile.length === 0 ? (
-              <p
-                style={{
-                  margin: 0,
-                  color: 'var(--text-muted)',
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                }}
-              >
-                No supporting documents are currently shown as on file.
-              </p>
-            ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                  gap: 8,
-                }}
-              >
-                                {documentsOnFile.map(doc => {
-                  const canOpen =
-                    documentHasStoredFile(doc) &&
-                    canDownloadDocuments &&
-                    employerCanSeeDocument(doc)
+            {documentsOnFile.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {documentsOnFile.map(doc => {
+                  const canDownload = canDownloadSupportingDocument(doc)
+                  const isOpening = openingDocumentId === doc.id
 
                   return (
                     <div
                       key={doc.id}
                       style={{
                         border: '1px solid var(--border-light)',
-                        background: 'var(--light-bg)',
-                        borderRadius: 12,
-                        padding: 11,
+                        borderRadius: 14,
+                        padding: 12,
                         display: 'flex',
                         justifyContent: 'space-between',
-                        gap: 10,
+                        gap: 12,
                         alignItems: 'center',
                       }}
                     >
@@ -739,68 +748,49 @@ export default function EmployerCandidateCard({
                         <p
                           style={{
                             margin: 0,
-                            fontSize: 12,
+                            fontSize: 13,
                             fontWeight: 900,
                             color: 'var(--text-dark)',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
                           }}
                         >
-                          {formatDocType(doc.doc_type)}
+                          {getDocumentDisplayLabel(doc.doc_type)}
                         </p>
 
                         <p
                           style={{
                             margin: 0,
-                            marginTop: 2,
-                            fontSize: 11,
+                            marginTop: 3,
+                            fontSize: 12,
                             color: 'var(--text-muted)',
-                            whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          {doc.name || 'Document held on file'}
+                          {doc.name || 'Document on file'}
                         </p>
                       </div>
 
-                                            {canOpen ? (
+                      {canDownload ? (
                         <button
                           type="button"
+                          className="crm-btn-ghost crm-btn-sm"
                           onClick={() => openEmployerDocument(doc)}
-                          disabled={openingDocumentId === doc.id}
-                          style={{
-                            border: 0,
-                            background: 'transparent',
-                            color: 'var(--primary)',
-                            fontFamily: 'inherit',
-                            fontSize: 11,
-                            fontWeight: 900,
-                            textDecoration: 'none',
-                            whiteSpace: 'nowrap',
-                            cursor:
-                              openingDocumentId === doc.id
-                                ? 'wait'
-                                : 'pointer',
-                            padding: 0,
-                          }}
+                          disabled={isOpening}
+                          style={{ flexShrink: 0 }}
                         >
-                          {openingDocumentId === doc.id
-                            ? 'Opening...'
-                            : 'Download'}
+                          {isOpening ? 'Opening...' : 'Download'}
                         </button>
                       ) : (
                         <span
                           style={{
-                            background: 'var(--white)',
-                            border: '1px solid var(--border)',
-                            color: 'var(--text-muted)',
+                            flexShrink: 0,
                             borderRadius: 999,
-                            padding: '4px 8px',
-                            fontSize: 10,
+                            padding: '6px 10px',
+                            background: '#f0f0f2',
+                            color: '#737373',
+                            fontSize: 11,
                             fontWeight: 900,
-                            whiteSpace: 'nowrap',
                           }}
                         >
                           On file
@@ -810,6 +800,17 @@ export default function EmployerCandidateCard({
                   )
                 })}
               </div>
+            ) : (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.6,
+                }}
+              >
+                No supporting documents are currently recorded on file.
+              </p>
             )}
           </section>
 
@@ -866,7 +867,7 @@ export default function EmployerCandidateCard({
               >
                 {openingDocumentId === formattedCv.id
                   ? 'Opening...'
-                  : 'Open formatted CV'}
+                  : 'Open CV'}
               </button>
             )}
 
@@ -1245,7 +1246,7 @@ export default function EmployerCandidateCard({
                     color: 'var(--teal)',
                   }}
                 >
-                  Formatted CV
+                  CV
                 </p>
 
                 <p
@@ -1256,7 +1257,7 @@ export default function EmployerCandidateCard({
                     lineHeight: 1.5,
                   }}
                 >
-                  Educated Appointments formatted CV.
+                  Educated Appointments CV.
                 </p>
               </div>
 
@@ -1313,7 +1314,7 @@ export default function EmployerCandidateCard({
                       color: 'var(--white)',
                     }}
                   >
-                    Formatted CV available
+                    CV available
                   </p>
 
                   <p
@@ -1352,7 +1353,7 @@ export default function EmployerCandidateCard({
                     >
                       {openingDocumentId === formattedCv.id
                         ? 'Opening...'
-                        : 'Open formatted CV'}
+                        : 'Open CV'}
                     </button>
                   )}
                 </div>
@@ -1368,7 +1369,7 @@ export default function EmployerCandidateCard({
                       color: 'var(--white)',
                     }}
                   >
-                    Formatted CV pending
+                    CV pending
                   </p>
 
                   <p
@@ -1380,7 +1381,7 @@ export default function EmployerCandidateCard({
                       color: 'rgba(255,255,255,0.60)',
                     }}
                   >
-                    The Educated Appointments formatted CV has not been added
+                    The Educated Appointments CV has not been added
                     yet.
                   </p>
                 </div>
