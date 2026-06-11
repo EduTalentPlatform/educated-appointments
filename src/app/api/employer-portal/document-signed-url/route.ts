@@ -368,6 +368,16 @@ export async function POST(request: Request) {
       normaliseDocType(application.status),
     )
 
+    if (docType === 'reference' || docType === 'references') {
+      return NextResponse.json(
+        {
+          error:
+            'Reference details are shown in the employer portal and are not downloadable.',
+        },
+        { status: 403 },
+      )
+    }
+
     if (docType === 'formatted_cv') {
       if (access.can_view_submissions !== true || !isSubmittedApplication) {
         return NextResponse.json(

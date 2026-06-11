@@ -506,7 +506,80 @@ export default function EmployerCandidateCard({
     return labels[String(docType || '').toLowerCase()] || 'Supporting document'
   }
 
+  function isReferenceDocument(doc: CandidateDocument) {
+    const type = String(doc.doc_type || '').toLowerCase()
+    return type === 'reference' || type === 'references'
+  }
+
+  function getReferenceDetailRows(doc: CandidateDocument) {
+    const details = (doc as any).details
+
+    if (!details || typeof details !== 'object') return []
+
+    const rows = [
+      {
+        label: 'Name',
+        value:
+          details.referee_name ||
+          details.reference_name ||
+          details.name ||
+          details.contact_name,
+      },
+      {
+        label: 'Job title',
+        value:
+          details.referee_job_title ||
+          details.job_title ||
+          details.position ||
+          details.title,
+      },
+      {
+        label: 'Company',
+        value:
+          details.referee_company ||
+          details.company ||
+          details.organisation ||
+          details.employer,
+      },
+      {
+        label: 'Relationship',
+        value:
+          details.relationship ||
+          details.relationship_to_candidate ||
+          details.capacity,
+      },
+      {
+        label: 'Email',
+        value:
+          details.referee_email ||
+          details.email ||
+          details.contact_email,
+      },
+      {
+        label: 'Phone',
+        value:
+          details.referee_phone ||
+          details.phone ||
+          details.telephone ||
+          details.mobile,
+      },
+      {
+        label: 'Status',
+        value: details.status,
+      },
+    ]
+
+    return rows
+      .map(row => ({
+        label: row.label,
+        value: String(row.value ?? '').trim(),
+      }))
+      .filter(row => row.value)
+  }
+
   function canDownloadSupportingDocument(doc: CandidateDocument) {
+    if (isReferenceDocument(doc)) return false
+
     return Boolean(
       canDownloadDocuments &&
         (doc.file_url || (doc.storage_bucket && doc.storage_path)),
@@ -968,6 +1041,11 @@ export default function EmployerCandidateCard({
             {documentsOnFile.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {documentsOnFile.map(doc => {
+                  const isReference = isReferenceDocument(doc)
+                  const referenceRows =
+                    isReference && canDownloadDocuments
+                      ? getReferenceDetailRows(doc)
+                      : []
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
@@ -1009,9 +1087,75 @@ export default function EmployerCandidateCard({
                         >
                           {doc.name || 'Document on file'}
                         </p>
+
+                        {referenceRows.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'repeat(auto-fit, minmax(150px, 1fr))',
+                              gap: 8,
+                            }}
+                          >
+                            {referenceRows.map(row => (
+                              <div
+                                key={`${doc.id}-${row.label}`}
+                                style={{
+                                  border: '1px solid var(--border-light)',
+                                  borderRadius: 10,
+                                  padding: '8px 9px',
+                                  background: 'var(--light-bg)',
+                                  minWidth: 0,
+                                }}
+                              >
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    fontSize: 10,
+                                    color: 'var(--text-muted)',
+                                    fontWeight: 900,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 0.5,
+                                  }}
+                                >
+                                  {row.label}
+                                </p>
+
+                                <p
+                                  style={{
+                                    margin: 0,
+                                    marginTop: 3,
+                                    fontSize: 12,
+                                    color: 'var(--text-dark)',
+                                    fontWeight: 800,
+                                    overflowWrap: 'anywhere',
+                                    wordBreak: 'break-word',
+                                  }}
+                                >
+                                  {row.value}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
-                      {canDownload ? (
+                      {isReference && canDownloadDocuments ? (
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            borderRadius: 999,
+                            padding: '6px 10px',
+                            background: '#e8f5e8',
+                            color: '#217822',
+                            fontSize: 11,
+                            fontWeight: 900,
+                          }}
+                        >
+                          Details shown
+                        </span>
+                      ) : canDownload ? (
                         <button
                           type="button"
                           className="crm-btn-ghost crm-btn-sm"
