@@ -249,6 +249,17 @@ const APPLICATION_PORTAL_DOCUMENT_TYPES = [
   { value: 'other', label: 'Other documents' },
 ]
 
+const APPLICATION_UPLOAD_DOCUMENT_TYPES = [
+  { value: 'formatted_cv', label: 'Formatted CV' },
+  { value: 'cv', label: 'Original CV' },
+  { value: 'qualification', label: 'Certificates / qualifications' },
+  { value: 'right_to_work', label: 'Right to work' },
+  { value: 'dbs', label: 'DBS' },
+  { value: 'reference', label: 'References' },
+  { value: 'interview_prep', label: 'Interview prep' },
+  { value: 'other', label: 'Other documents' },
+]
+
 function isBlankCandidateValue(value: unknown) {
   if (value === null || value === undefined) return true
   if (Array.isArray(value)) return value.length === 0
@@ -2785,7 +2796,7 @@ Kind regards,`
                         setCandidateDocumentUploadType(event.target.value)
                       }
                     >
-                      {APPLICATION_PORTAL_DOCUMENT_TYPES.map(type => (
+                      {APPLICATION_UPLOAD_DOCUMENT_TYPES.map(type => (
                         <option key={type.value} value={type.value}>
                           {type.label}
                         </option>
