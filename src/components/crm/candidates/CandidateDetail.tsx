@@ -499,6 +499,9 @@ const [selectedDocument, setSelectedDocument] = useState<CandidateDocument | nul
 const [selectedDocumentUrl, setSelectedDocumentUrl] = useState('')
 const [loadingSelectedDocumentUrl, setLoadingSelectedDocumentUrl] = useState(false)
 const [selectedDocumentUrlError, setSelectedDocumentUrlError] = useState<string | null>(null)
+const [overviewCvUrl, setOverviewCvUrl] = useState('')
+const [loadingOverviewCvUrl, setLoadingOverviewCvUrl] = useState(false)
+const [overviewCvUrlError, setOverviewCvUrlError] = useState<string | null>(null)
 
 const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null)
   const [releasingDocumentId, setReleasingDocumentId] = useState<string | null>(null)
@@ -569,6 +572,18 @@ const [createError, setCreateError] = useState<string | null>(null)
   }, [candidateDocuments])
 
   const selectedDocSafe = selectedDocument ?? candidateDocuments[0] ?? null
+
+  const overviewCvDocument = useMemo(() => {
+  const docsWithFiles = candidateDocuments.filter(doc =>
+    Boolean(doc.file_url || (doc.storage_bucket && doc.storage_path)),
+  )
+
+  return (
+    docsWithFiles.find(doc => doc.doc_type === 'formatted_cv') ||
+    docsWithFiles.find(doc => doc.doc_type === 'cv') ||
+    null
+  )
+}, [candidateDocuments])
 
   function documentHasStoredFile(document: CandidateDocument | null) {
   if (!document) return false
@@ -649,6 +664,83 @@ async function openSelectedDocument() {
   }
 
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function loadOverviewCvUrl(document: CandidateDocument | null) {
+  if (!document || !documentHasStoredFile(document)) {
+    setOverviewCvUrl(candidateRecord.cv_url || '')
+    setOverviewCvUrlError(null)
+    return
+  }
+
+  setLoadingOverviewCvUrl(true)
+  setOverviewCvUrlError(null)
+
+  try {
+    const res = await fetch('/api/crm/document-signed-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_id: document.id,
+        document_kind: 'candidate',
+      }),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setOverviewCvUrl('')
+      setOverviewCvUrlError(
+        json?.error || 'Could not preview this CV securely.',
+      )
+      return
+    }
+
+    setOverviewCvUrl(json?.url || '')
+  } catch {
+    setOverviewCvUrl('')
+    setOverviewCvUrlError('Could not preview this CV securely.')
+  } finally {
+    setLoadingOverviewCvUrl(false)
+  }
+}
+
+async function openOverviewCvDocument() {
+  if (overviewCvDocument && documentHasStoredFile(overviewCvDocument)) {
+    let url = overviewCvUrl
+
+    if (!url) {
+      setLoadingOverviewCvUrl(true)
+
+      const res = await fetch('/api/crm/document-signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_id: overviewCvDocument.id,
+          document_kind: 'candidate',
+        }),
+      })
+
+      const json = await res.json().catch(() => null)
+
+      setLoadingOverviewCvUrl(false)
+
+      if (!res.ok || !json?.url) {
+        alert(json?.error || 'Could not open this CV securely.')
+        return
+      }
+
+      url = json.url
+      setOverviewCvUrl(url)
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  if (candidateRecord.cv_url) {
+    window.open(candidateRecord.cv_url, '_blank', 'noopener,noreferrer')
+  }
 }
 
   const selectedStandards = useMemo(() => {
@@ -791,6 +883,10 @@ useEffect(() => {
   loadCandidateDocumentUrl(selectedDocSafe)
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [selectedDocSafe?.id])
+
+useEffect(() => {
+  loadOverviewCvUrl(overviewCvDocument)
+}, [overviewCvDocument?.id, candidateRecord.cv_url])
 
   function openEditCandidate() {
     setEditCandidateForm(candidateToForm(candidateRecord))
@@ -2015,15 +2111,20 @@ async function deleteActivity(activityId: string) {
 </div>
 
       {activeTab === 'overview' && (
-        <OverviewTab
-          candidateRecord={candidateRecord}
-          candidateName={candidateName}
-          getWorkTypeLabel={getWorkTypeLabel}
-          getDbsLabel={getDbsLabel}
-          selectedStandards={selectedStandards}
-          isRightToWorkConfirmed={isRightToWorkConfirmed}
-        />
-      )}
+  <OverviewTab
+    candidateRecord={candidateRecord}
+    candidateName={candidateName}
+    getWorkTypeLabel={getWorkTypeLabel}
+    getDbsLabel={getDbsLabel}
+    selectedStandards={selectedStandards}
+    isRightToWorkConfirmed={isRightToWorkConfirmed}
+    overviewCvDocument={overviewCvDocument}
+    overviewCvUrl={overviewCvUrl}
+    loadingOverviewCvUrl={loadingOverviewCvUrl}
+    overviewCvUrlError={overviewCvUrlError}
+    openOverviewCvDocument={openOverviewCvDocument}
+  />
+)}
 
       {activeTab === 'applications' && (
         <ApplicationsTab
@@ -2162,6 +2263,18 @@ openSelectedDocument={openSelectedDocument}
   )
 }
 
+function getOverviewPreviewFileKind(value?: string | null) {
+  if (!value) return 'unknown'
+
+  const clean = value.split('?')[0].toLowerCase()
+
+  if (/\.(jpg|jpeg|png|webp|gif)$/i.test(clean)) return 'image'
+  if (/\.pdf$/i.test(clean)) return 'pdf'
+  if (/\.(doc|docx)$/i.test(clean)) return 'word'
+
+  return 'unknown'
+}
+
 function OverviewTab({
   candidateRecord,
   candidateName,
@@ -2169,6 +2282,11 @@ function OverviewTab({
   getDbsLabel,
   selectedStandards,
   isRightToWorkConfirmed,
+  overviewCvDocument,
+  overviewCvUrl,
+  loadingOverviewCvUrl,
+  overviewCvUrlError,
+  openOverviewCvDocument,
 }: {
   candidateRecord: Candidate
   candidateName: string
@@ -2176,6 +2294,11 @@ function OverviewTab({
   getDbsLabel: (value?: string | null) => string
   selectedStandards: string[]
   isRightToWorkConfirmed: (value: Candidate['right_to_work']) => boolean
+  overviewCvDocument: CandidateDocument | null
+  overviewCvUrl: string
+  loadingOverviewCvUrl: boolean
+  overviewCvUrlError: string | null
+  openOverviewCvDocument: () => Promise<void>
 }) {
   const lookingForRoles = Array.isArray(candidateRecord.looking_for_roles)
     ? candidateRecord.looking_for_roles.filter(Boolean)
@@ -2188,6 +2311,20 @@ function OverviewTab({
     candidateRecord.county,
     candidateRecord.postcode,
   ].filter(Boolean)
+
+  const cvPreviewUrl =
+  overviewCvUrl || overviewCvDocument?.file_url || candidateRecord.cv_url || ''
+
+const cvPreviewKind =
+  getOverviewPreviewFileKind(overviewCvDocument?.name) !== 'unknown'
+    ? getOverviewPreviewFileKind(overviewCvDocument?.name)
+    : getOverviewPreviewFileKind(
+        overviewCvDocument?.storage_path ||
+          overviewCvDocument?.file_url ||
+          cvPreviewUrl,
+      )
+
+const hasCvPreview = Boolean(overviewCvDocument || candidateRecord.cv_url)
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -2347,19 +2484,26 @@ function OverviewTab({
             </DetailRow>
 
             <DetailRow label="CV">
-              {candidateRecord.cv_url ? (
-                <a
-                  href={candidateRecord.cv_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="crm-detail-link"
-                >
-                  Open CV ↗
-                </a>
-              ) : (
-                <span className="crm-detail-value">—</span>
-              )}
-            </DetailRow>
+  {hasCvPreview ? (
+    <button
+      type="button"
+      onClick={openOverviewCvDocument}
+      disabled={loadingOverviewCvUrl}
+      className="crm-detail-link"
+      style={{
+        border: 0,
+        background: 'transparent',
+        padding: 0,
+        cursor: loadingOverviewCvUrl ? 'wait' : 'pointer',
+        font: 'inherit',
+      }}
+    >
+      {loadingOverviewCvUrl ? 'Opening CV...' : 'Open CV ↗'}
+    </button>
+  ) : (
+    <span className="crm-detail-value">—</span>
+  )}
+</DetailRow>
           </div>
         </div>
       </div>
@@ -2382,6 +2526,174 @@ function OverviewTab({
             <p className="crm-empty">No standards / delivery areas recorded.</p>
           )}
         </div>
+
+        <div className="crm-card">
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 12,
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    }}
+  >
+    <div>
+      <p className="crm-card-title">CV preview</p>
+      <p
+        style={{
+          marginTop: 4,
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
+        {overviewCvDocument?.doc_type === 'formatted_cv'
+          ? 'Showing the formatted CV saved against this candidate.'
+          : overviewCvDocument?.doc_type === 'cv'
+            ? 'Showing the candidate CV saved against this candidate.'
+            : 'Preview the CV saved against this candidate.'}
+      </p>
+    </div>
+
+    {hasCvPreview && (
+      <button
+        type="button"
+        className="crm-btn-ghost crm-btn-sm"
+        onClick={openOverviewCvDocument}
+        disabled={loadingOverviewCvUrl}
+      >
+        {loadingOverviewCvUrl ? 'Opening...' : 'Open full CV ↗'}
+      </button>
+    )}
+  </div>
+
+  {overviewCvUrlError && (
+    <p
+      style={{
+        marginTop: 0,
+        marginBottom: 12,
+        fontSize: 12,
+        color: '#b42318',
+        fontWeight: 700,
+      }}
+    >
+      {overviewCvUrlError}
+    </p>
+  )}
+
+  <div
+    style={{
+      height: 520,
+      borderRadius: 16,
+      overflow: 'hidden',
+      border: '1px solid var(--border)',
+      background: '#f8fafc',
+    }}
+  >
+    {loadingOverviewCvUrl && !cvPreviewUrl ? (
+      <div
+        style={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: 20,
+        }}
+      >
+        <p className="crm-empty">Loading CV preview...</p>
+      </div>
+    ) : cvPreviewUrl && cvPreviewKind === 'pdf' ? (
+      <iframe
+        src={cvPreviewUrl}
+        title="Candidate CV preview"
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 0,
+          background: '#fff',
+        }}
+      />
+    ) : cvPreviewUrl && cvPreviewKind === 'image' ? (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          background: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 10,
+        }}
+      >
+        <img
+          src={cvPreviewUrl}
+          alt="Candidate CV preview"
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+          }}
+        />
+      </div>
+    ) : hasCvPreview ? (
+      <div
+        style={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: 22,
+        }}
+      >
+        <div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14,
+              fontWeight: 900,
+              color: 'var(--text-dark)',
+            }}
+          >
+            Preview unavailable for this file type
+          </p>
+          <p
+            style={{
+              margin: '6px 0 14px',
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              lineHeight: 1.5,
+            }}
+          >
+            Word documents normally need to be opened in a new tab.
+          </p>
+          <button
+            type="button"
+            className="crm-btn-primary crm-btn-sm"
+            onClick={openOverviewCvDocument}
+            disabled={loadingOverviewCvUrl}
+          >
+            {loadingOverviewCvUrl ? 'Opening...' : 'Open full CV ↗'}
+          </button>
+        </div>
+      </div>
+    ) : (
+      <div
+        style={{
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: 20,
+        }}
+      >
+        <p className="crm-empty">No CV uploaded yet.</p>
+      </div>
+    )}
+  </div>
+</div>
 
         <div className="crm-card">
           <p className="crm-card-title" style={{ marginBottom: 12 }}>
