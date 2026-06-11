@@ -190,6 +190,42 @@ function documentHasStoredFile(document?: {
   )
 }
 
+function formatPortalFactValue(value: unknown) {
+  const raw = String(value ?? '').trim()
+
+  if (!raw) return ''
+
+  const normalised = raw.toLowerCase().replace(/\s+/g, '_')
+
+  if (normalised === 'not_completed') {
+    return 'Not completed'
+  }
+
+  if (
+    normalised === 'not_completed_happy_to_complete' ||
+    normalised === 'not_completed_happy_to_complete_if_required' ||
+    normalised.startsWith('not_completed_happy_to')
+  ) {
+    return 'Not completed - happy to complete'
+  }
+
+  if (
+    normalised === 'not_completed_happy_to_apply' ||
+    normalised === 'not_completed_happy_to_apply_if_required'
+  ) {
+    return 'Not completed - happy to apply'
+  }
+
+  if (
+    normalised === 'on_update_service' ||
+    normalised === 'update_service'
+  ) {
+    return 'On update service'
+  }
+
+  return raw.replace(/_/g, ' ')
+}
+
 function cleanPortalDisplayValue(value: unknown) {
   const cleaned = String(value ?? '').trim()
   return cleaned.length > 0 ? cleaned : ''
@@ -284,6 +320,7 @@ function MiniFact({
         border: '1px solid var(--border-light)',
         borderRadius: 14,
         padding: '11px 12px',
+        minWidth: 0,
       }}
     >
       <p
@@ -291,6 +328,9 @@ function MiniFact({
           margin: 0,
           fontSize: 10,
           fontWeight: 900,
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                    lineHeight: 1.25,
           color: 'var(--text-muted)',
           textTransform: 'uppercase',
           letterSpacing: 0.7,
@@ -447,7 +487,7 @@ export default function EmployerCandidateCard({
     })
   }, [documents])
 
-  const dbsStatusForPortal = getDbsDisplayValue(candidate, dbsDocument)
+  const dbsStatusForPortal = formatPortalFactValue(getDbsDisplayValue(candidate, dbsDocument))
 
   function getDocumentDisplayLabel(docType?: string | null) {
     const labels: Record<string, string> = {
