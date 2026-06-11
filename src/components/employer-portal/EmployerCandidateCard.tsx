@@ -506,9 +506,13 @@ export default function EmployerCandidateCard({
   }
 
   function canDownloadSupportingDocument(doc: CandidateDocument) {
-    // At this stage, employers can only open/download the CV.
-    // Supporting documents are listed as on file only.
-    return false
+    const isPlaced = localStatus === 'placed'
+
+    return Boolean(
+      isPlaced &&
+        canDownloadDocuments &&
+        (doc.file_url || (doc.storage_bucket && doc.storage_path)),
+    )
   }
 
     async function openEmployerDocument(doc: CandidateDocument) {
@@ -941,8 +945,8 @@ export default function EmployerCandidateCard({
                   }}
                 >
                   Supporting documents held by Educated Appointments. Documents
-                  are listed here for visibility, but can only be downloaded
-                  once released.
+                  are listed here for visibility and become downloadable
+                  once the candidate is placed.
                 </p>
               </div>
 

@@ -378,6 +378,13 @@ export async function POST(request: Request) {
       return createDocumentResponse({ supabase, document })
     }
 
+    const isPlacedApplication =
+      normaliseDocType(application.status) === 'placed'
+
+    if (isPlacedApplication && access.can_view_submissions === true) {
+      return createDocumentResponse({ supabase, document })
+    }
+
     if (access.can_view_documents !== true) {
       return NextResponse.json(
         { error: 'This document has not been released to the employer.' },
