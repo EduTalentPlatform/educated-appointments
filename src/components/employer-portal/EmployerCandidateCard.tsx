@@ -394,6 +394,7 @@ export default function EmployerCandidateCard({
     Boolean(application.client_interview_date)
 
   const isRejected = localStatus === 'rejected'
+  const isFilled = localStatus === 'placed'
 
     const formattedCv = useMemo(() => {
     return (
@@ -735,9 +736,11 @@ export default function EmployerCandidateCard({
             >
               {isRejected
                 ? 'Rejected'
-                : interviewArranged
-                  ? 'Interview arranged'
-                  : statusLabel(localStatus)}
+                : isFilled
+                  ? 'Filled'
+                  : interviewArranged
+                    ? 'Interview arranged'
+                    : statusLabel(localStatus)}
             </span>
           </div>
 
@@ -775,7 +778,7 @@ export default function EmployerCandidateCard({
                   color: 'var(--success)',
                 }}
               >
-                Interview arranged
+                {isFilled ? 'Filled' : 'Interview arranged'}
               </p>
 
               <div
