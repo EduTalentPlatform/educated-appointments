@@ -244,9 +244,6 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
             'id, candidate_id, name, doc_type, summary, file_url, storage_bucket, storage_path, released, visible_to_employer, show_in_employer_portal, created_at',
           )
           .in('candidate_id', candidateIds)
-          .or(
-  'doc_type.eq.formatted_cv,doc_type.in.(qualification,certificate,certificates,right_to_work,dbs,reference),show_in_employer_portal.eq.true',
-)
           .order('created_at', { ascending: false })
       : { data: [] }
 
