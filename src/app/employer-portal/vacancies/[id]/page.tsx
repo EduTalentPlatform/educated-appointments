@@ -169,20 +169,43 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
   ) {
     return docs.map(doc => {
       const docType = normaliseDocType(doc?.doc_type)
-      const isPreReleaseDocument = PRE_RELEASE_EMPLOYER_DOC_TYPES.has(docType)
+      const hasFile = documentHasStoredFile(doc)
+      const isCvDocument = docType === 'formatted_cv' || docType === 'cv'
 
-      const canOpen =
-        canViewDocuments &&
-        documentHasStoredFile(doc) &&
-        employerCanSeeDocument(doc) &&
-        (isPreReleaseDocument || canDownloadSensitiveDocuments)
-
-      if (canOpen) {
-        return doc
+      if (!canViewDocuments || !hasFile) {
+        return {
+          ...doc,
+          has_file: hasFile,
+          file_url: null,
+          storage_bucket: null,
+          storage_path: null,
+        }
       }
 
+      // The employer should always be able to open the candidate CV once the
+      // candidate has been submitted to their portal.
+      if (isCvDocument) {
+        return {
+          ...doc,
+          has_file: true,
+        }
+      }
+
+      const canDownload =
+        canDownloadSensitiveDocuments && employerCanSeeDocument(doc)
+
+      if (canDownload) {
+        return {
+          ...doc,
+          has_file: true,
+        }
+      }
+
+      // Supporting documents should be visible as "on file", but not
+      // downloadable until Educated Appointments releases them.
       return {
         ...doc,
+        has_file: true,
         file_url: null,
         storage_bucket: null,
         storage_path: null,

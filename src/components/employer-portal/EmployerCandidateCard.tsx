@@ -9,6 +9,7 @@ type CandidateDocument = {
   file_url: string | null
   storage_bucket?: string | null
   storage_path?: string | null
+  has_file?: boolean | null
   released: boolean | null
   visible_to_employer: boolean | null
   show_in_employer_portal: boolean | null
@@ -176,6 +177,10 @@ function documentHasStoredFile(document?: {
   storage_path?: string | null
 }) {
   if (!document) return false
+
+  
+
+  if ((document as any).has_file === true) return true
 
   return Boolean(
     document.file_url ||
