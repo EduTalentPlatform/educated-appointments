@@ -1103,6 +1103,11 @@ export default function EmployerCandidateCard({
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
+                  // Hide references until the placement has been created, same as supporting documents.
+                  if (isReference && !canDownloadDocuments) {
+                    return null
+                  }
+
                   // Compact reference row
                   if (isReference) {
                     return (
