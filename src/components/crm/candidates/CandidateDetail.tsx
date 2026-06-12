@@ -896,7 +896,11 @@ useEffect(() => {
 }, [selectedDocSafe?.id])
 
 useEffect(() => {
-  loadOverviewCvUrl(overviewCvDocument)
+  // Do not auto-load the CV preview when opening the candidate page.
+  // Word/PDF files can trigger an automatic browser download when loaded in an iframe.
+  setOverviewCvUrl('')
+  setOverviewCvUrlError(null)
+  setLoadingOverviewCvUrl(false)
 }, [overviewCvDocument?.id, candidateRecord.cv_url])
 
   function openEditCandidate() {
@@ -2323,9 +2327,7 @@ function OverviewTab({
     candidateRecord.postcode,
   ].filter(Boolean)
 
-  const cvPreviewUrl = overviewCvDocument
-  ? `/api/crm/document-preview?document_id=${overviewCvDocument.id}&document_kind=candidate`
-  : candidateRecord.cv_url || ''
+  const cvPreviewUrl = overviewCvUrl || ''
 
 const cvPreviewKind =
   getOverviewPreviewFileKind(overviewCvDocument?.name) !== 'unknown'
