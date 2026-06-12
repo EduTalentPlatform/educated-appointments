@@ -1103,6 +1103,109 @@ export default function EmployerCandidateCard({
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
+                  // Compact reference row
+                  if (isReference) {
+                    return (
+                      <div
+                        key={doc.id}
+                        style={{
+                          border: '1px solid var(--border-light)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 5,
+                          background: '#ffffff',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: 13,
+                                fontWeight: 900,
+                                color: 'var(--text-dark)',
+                              }}
+                            >
+                              Reference details
+                            </p>
+
+                            <p
+                              style={{
+                                margin: 0,
+                                marginTop: 2,
+                                fontSize: 12,
+                                color: 'var(--text-muted)',
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {doc.name || 'Reference on file'}
+                            </p>
+                          </div>
+
+                          <span
+                            style={{
+                              flexShrink: 0,
+                              borderRadius: 999,
+                              padding: '4px 8px',
+                              background: '#e8f5e8',
+                              color: '#217822',
+                              fontSize: 10,
+                              fontWeight: 900,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Details shown
+                          </span>
+                        </div>
+
+                        {referenceRows.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              paddingTop: 7,
+                              borderTop: '1px solid var(--border-light)',
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              columnGap: 16,
+                              rowGap: 4,
+                            }}
+                          >
+                            {referenceRows.map(row => (
+                              <span
+                                key={`${doc.id}-${row.label}`}
+                                style={{
+                                  fontSize: 12,
+                                  lineHeight: 1.45,
+                                  color: 'var(--text-muted)',
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
+                                <strong
+                                  style={{
+                                    color: 'var(--text-dark)',
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  {row.label}:
+                                </strong>{' '}
+                                {formatPortalFactValue(row.value)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={doc.id}
