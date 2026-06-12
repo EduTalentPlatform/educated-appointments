@@ -3067,8 +3067,53 @@ function PortalPresentationTab({
   const candidateName = `${c?.first_name ?? ''} ${c?.last_name ?? ''}`.trim()
 
   const formattedCv = documents.find(
-    doc => doc.doc_type === 'formatted_cv' && Boolean(doc.file_url),
+    doc => doc.doc_type === 'formatted_cv' && documentHasStoredFile(doc),
   )
+
+  const [formattedCvPreviewUrl, setFormattedCvPreviewUrl] = useState<string | null>(null)
+  const [formattedCvPreviewError, setFormattedCvPreviewError] = useState<string | null>(null)
+  const [loadingFormattedCvPreview, setLoadingFormattedCvPreview] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadFormattedCvPreview() {
+      if (!formattedCv || !documentHasStoredFile(formattedCv)) {
+        setFormattedCvPreviewUrl(null)
+        setFormattedCvPreviewError(null)
+        setLoadingFormattedCvPreview(false)
+        return
+      }
+
+      setLoadingFormattedCvPreview(true)
+      setFormattedCvPreviewError(null)
+
+      try {
+        const url = await getSecureDocumentUrl(formattedCv, 'candidate')
+
+        if (!cancelled) {
+          setFormattedCvPreviewUrl(url)
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setFormattedCvPreviewUrl(null)
+          setFormattedCvPreviewError(
+            error?.message || 'Could not load formatted CV preview.',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingFormattedCvPreview(false)
+        }
+      }
+    }
+
+    loadFormattedCvPreview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [formattedCv?.id])
 
   const documentsShownOnPortal = documents.filter(
     doc =>
@@ -3133,7 +3178,9 @@ function PortalPresentationTab({
     }
   }
 
-  const formattedCvKind = getFileKind(formattedCv?.file_url)
+  const formattedCvKind = getFileKind(
+    formattedCvPreviewUrl || formattedCv?.file_url || formattedCv?.storage_path,
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -3624,11 +3671,65 @@ function PortalPresentationTab({
                 overflow: 'hidden',
               }}
             >
-              {formattedCv?.file_url ? (
+              {formattedCv ? (
                 <>
-                  {formattedCvKind === 'pdf' && (
+                  {loadingFormattedCvPreview && !formattedCvPreviewUrl && (
+                    <div
+                      style={{
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        padding: 20,
+                        color: 'var(--white)',
+                        fontSize: 13,
+                        fontWeight: 900,
+                      }}
+                    >
+                      Loading formatted CV...
+                    </div>
+                  )}
+
+                  {formattedCvPreviewError && !loadingFormattedCvPreview && (
+                    <div
+                      style={{
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        padding: 20,
+                      }}
+                    >
+                      <div>
+                        <p style={{ fontSize: 30, marginBottom: 8 }}>⚠️</p>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: 13,
+                            fontWeight: 900,
+                            color: 'var(--white)',
+                          }}
+                        >
+                          Could not load CV preview
+                        </p>
+                        <p
+                          style={{
+                            margin: '6px 0 0',
+                            fontSize: 12,
+                            color: 'rgba(255,255,255,0.68)',
+                          }}
+                        >
+                          {formattedCvPreviewError}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {formattedCvPreviewUrl && formattedCvKind === 'pdf' && (
                     <iframe
-                      src={formattedCv.file_url}
+                      src={formattedCvPreviewUrl}
                       title="Formatted CV preview"
                       style={{
                         width: '100%',
@@ -3639,7 +3740,7 @@ function PortalPresentationTab({
                     />
                   )}
 
-                  {formattedCvKind === 'image' && (
+                  {formattedCvPreviewUrl && formattedCvKind === 'image' && (
                     <div
                       style={{
                         width: '100%',
@@ -3652,7 +3753,7 @@ function PortalPresentationTab({
                       }}
                     >
                       <img
-                        src={formattedCv.file_url}
+                        src={formattedCvPreviewUrl}
                         alt="Formatted CV preview"
                         style={{
                           maxWidth: '100%',
@@ -3663,7 +3764,7 @@ function PortalPresentationTab({
                     </div>
                   )}
 
-                  {['word', 'unknown'].includes(formattedCvKind) && (
+                  {formattedCvPreviewUrl && ['word', 'unknown'].includes(formattedCvKind) && (
                     <div
                       style={{
                         height: '100%',
