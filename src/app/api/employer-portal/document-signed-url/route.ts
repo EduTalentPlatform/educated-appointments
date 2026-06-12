@@ -162,6 +162,33 @@ function candidateDocumentCanBeViewedByEmployer(document: any) {
   return isReleased
 }
 
+function normaliseStorageBucket(value: unknown) {
+  const bucket = String(value || '').trim()
+
+  if (!bucket) return ''
+
+  const normalised = bucket
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\/+$/g, '')
+
+  if (
+    normalised === 'candidate-document' ||
+    normalised === 'candidate-documents'
+  ) {
+    return 'candidate-documents'
+  }
+
+  if (
+    normalised === 'vacancy-document' ||
+    normalised === 'vacancy-documents'
+  ) {
+    return 'vacancy-documents'
+  }
+
+  return normalised
+}
+
 async function createDocumentResponse({
   supabase,
   document,
@@ -172,8 +199,10 @@ async function createDocumentResponse({
   const storageInfo = getDocumentStorageInfo(document)
 
   if (storageInfo?.bucket && storageInfo?.path) {
+    const bucket = normaliseStorageBucket(storageInfo.bucket)
+
     const { data, error } = await supabase.storage
-      .from(storageInfo.bucket)
+      .from(bucket)
       .createSignedUrl(storageInfo.path, SIGNED_URL_SECONDS)
 
     if (error || !data?.signedUrl) {
@@ -182,6 +211,8 @@ async function createDocumentResponse({
           error:
             error?.message ||
             'Could not create a secure document link.',
+          bucket,
+          path: storageInfo.path,
         },
         { status: 400 },
       )
