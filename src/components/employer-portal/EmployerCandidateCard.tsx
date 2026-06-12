@@ -506,6 +506,16 @@ export default function EmployerCandidateCard({
     return labels[String(docType || '').toLowerCase()] || 'Supporting document'
   }
 
+  function formatReferenceDetailValue(value: unknown) {
+    const raw = String(value ?? '').trim()
+
+    if (!raw) return ''
+
+    return raw
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, letter => letter.toUpperCase())
+  }
+
   function isReferenceDocument(doc: CandidateDocument) {
     const type = String(doc.doc_type || '').toLowerCase()
     return type === 'reference' || type === 'references'
@@ -1079,8 +1089,17 @@ export default function EmployerCandidateCard({
                 {documentsOnFile.map(doc => {
                   const isReference = isReferenceDocument(doc)
                   const referenceRows = isReference
+
                     ? getReferenceDetailRows(doc)
+
                     : []
+
+                  const referenceSummary = referenceRows
+
+                    .map(row => `${row.label}: ${formatReferenceDetailValue(row.value)}`)
+
+                    .join(' · ')
+
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
@@ -1124,54 +1143,21 @@ export default function EmployerCandidateCard({
                           {doc.name || 'Document on file'}
                         </p>
 
-                        {referenceRows.length > 0 && (
-                          <div
+                                                {referenceSummary && (
+                          <p
                             style={{
-                              marginTop: 10,
+                              margin: '8px 0 0',
+                              paddingTop: 8,
                               borderTop: '1px solid var(--border-light)',
-                              paddingTop: 10,
-                              display: 'grid',
-                              gridTemplateColumns:
-                                'repeat(auto-fit, minmax(220px, 1fr))',
-                              columnGap: 18,
-                              rowGap: 6,
+                              fontSize: 12,
+                              lineHeight: 1.6,
+                              color: 'var(--text-muted)',
+                              overflowWrap: 'anywhere',
+                              wordBreak: 'break-word',
                             }}
                           >
-                            {referenceRows.map(row => (
-                              <div
-                                key={`${doc.id}-${row.label}`}
-                                style={{
-                                  display: 'grid',
-                                  gridTemplateColumns: '92px minmax(0, 1fr)',
-                                  gap: 8,
-                                  alignItems: 'baseline',
-                                  minWidth: 0,
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    fontSize: 11,
-                                    color: 'var(--text-muted)',
-                                    fontWeight: 800,
-                                  }}
-                                >
-                                  {row.label}
-                                </span>
-
-                                <span
-                                  style={{
-                                    fontSize: 12,
-                                    color: 'var(--text-dark)',
-                                    fontWeight: 800,
-                                    overflowWrap: 'anywhere',
-                                    wordBreak: 'break-word',
-                                  }}
-                                >
-                                  {formatPortalFactValue(row.value)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                            {referenceSummary}
+                          </p>
                         )}
                       </div>
 
@@ -1181,10 +1167,10 @@ export default function EmployerCandidateCard({
                             style={{
                               flexShrink: 0,
                               borderRadius: 999,
-                              padding: '6px 10px',
+                              padding: '4px 8px',
                               background: '#e8f5e8',
                               color: '#217822',
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: 900,
                             }}
                           >
