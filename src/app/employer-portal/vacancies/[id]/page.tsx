@@ -5,6 +5,8 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import EmployerPortalShell from '@/components/employer-portal/EmployerPortalShell'
 import EmployerCandidateCard from '@/components/employer-portal/EmployerCandidateCard'
 
+export const dynamic = 'force-dynamic'
+
 const SUBMITTED_STATUSES = [
   'submitted',
   'presented',
@@ -36,12 +38,29 @@ function normaliseRelation<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null
 }
 
-interface Props {
-  params: Promise<{ id: string }>
+function firstSearchValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
 }
 
-export default async function EmployerPortalVacancyPage({ params }: Props) {
+interface Props {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}
+
+export default async function EmployerPortalVacancyPage({
+  params,
+  searchParams,
+}: Props) {
   const { id } = await params
+  const resolvedSearchParams = searchParams ? await searchParams : {}
+
+  const previewParam = firstSearchValue(resolvedSearchParams.crm_preview)
+  const previewApplicationId = firstSearchValue(
+    resolvedSearchParams.application_id,
+  )
+
+  const isInternalPreviewRequest =
+    previewParam === '1' || previewParam === 'true'
 
   const authSupabase = await createServerClient()
   const {
@@ -69,20 +88,41 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
     .eq('active', true)
     .maybeSingle()
 
-  if (!portalUser) {
-    redirect('/employer-portal/login')
+  const { data: crmUser } =
+    isInternalPreviewRequest && user.email
+      ? await supabase
+          .from('crm_users')
+          .select('*')
+          .ilike('email', user.email)
+          .maybeSingle()
+      : { data: null }
+
+  const internalPreviewAllowed =
+    isInternalPreviewRequest &&
+    Boolean(crmUser) &&
+    (crmUser as any).active !== false &&
+    (crmUser as any).is_active !== false &&
+    (crmUser as any).disabled !== true
+
+  if (!internalPreviewAllowed) {
+    if (!portalUser) {
+      redirect('/employer-portal/login')
+    }
+
+    if (portalUser.must_change_password) {
+      redirect('/employer-portal/set-password?temporary=1')
+    }
   }
 
-  if (portalUser.must_change_password) {
-    redirect('/employer-portal/set-password?temporary=1')
-  }
+  let access: any = null
+  let vacancy: any = null
+  let client: any = null
 
-  const { data: access } = await supabase
-    .from('portal_vacancy_access')
-    .select(
-      `
-      *,
-      vacancies (
+  if (internalPreviewAllowed) {
+    const { data: previewVacancy } = await supabase
+      .from('vacancies')
+      .select(
+        `
         id,
         client_id,
         title,
@@ -92,24 +132,61 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
         location,
         region,
         salary_display,
-        created_at
+        created_at,
+        clients (
+          id,
+          company_name
+        )
+      `,
       )
-    `,
-    )
-    .eq('portal_user_id', portalUser.id)
-    .eq('vacancy_id', id)
-    .eq('can_view_vacancy', true)
-    .maybeSingle()
+      .eq('id', id)
+      .maybeSingle()
 
-  if (!access) notFound()
+    if (!previewVacancy) notFound()
 
-  const vacancy = normaliseRelation(access.vacancies)
+    vacancy = previewVacancy
+    client = normaliseRelation(previewVacancy.clients)
 
-  if (!vacancy) notFound()
-    
-  if (vacancy.client_id !== portalUser.client_id) notFound()
+    access = {
+      can_view_vacancy: true,
+      can_view_submissions: true,
+      can_view_documents: true,
+    }
+  } else {
+    const { data: portalAccess } = await supabase
+      .from('portal_vacancy_access')
+      .select(
+        `
+        *,
+        vacancies (
+          id,
+          client_id,
+          title,
+          status,
+          sector,
+          type,
+          location,
+          region,
+          salary_display,
+          created_at
+        )
+      `,
+      )
+      .eq('portal_user_id', portalUser.id)
+      .eq('vacancy_id', id)
+      .eq('can_view_vacancy', true)
+      .maybeSingle()
 
-  const client = normaliseRelation(portalUser.clients)
+    if (!portalAccess) notFound()
+
+    access = portalAccess
+    vacancy = normaliseRelation(portalAccess.vacancies)
+
+    if (!vacancy) notFound()
+    if (vacancy.client_id !== portalUser.client_id) notFound()
+
+    client = normaliseRelation(portalUser.clients)
+  }
 
     const PRE_RELEASE_EMPLOYER_DOC_TYPES = new Set([
     'formatted_cv',
@@ -213,7 +290,9 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
     })
   }
 
-  const { data: applications } = access.can_view_submissions
+  const canViewSubmissions = internalPreviewAllowed || access.can_view_submissions === true
+
+  const { data: applications } = canViewSubmissions
     ? await supabase
         .from('applications')
         .select(
@@ -251,7 +330,14 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
         .order('created_at', { ascending: false })
     : { data: [] }
 
-  const submittedApplications = applications ?? []
+  const allSubmittedApplications = applications ?? []
+
+  const submittedApplications =
+    internalPreviewAllowed && previewApplicationId
+      ? allSubmittedApplications.filter(
+          (application: any) => application.id === previewApplicationId,
+        )
+      : allSubmittedApplications
 
   const candidateIds = submittedApplications
     .map((application: any) => {
@@ -301,13 +387,39 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
 
   return (
     <EmployerPortalShell
-      name={portalUser.name}
-      email={portalUser.email}
+      name={
+        internalPreviewAllowed
+          ? 'Educated Appointments preview'
+          : portalUser.name
+      }
+      email={internalPreviewAllowed ? user.email || 'CRM user' : portalUser.email}
       clientName={client?.company_name || 'Employer'}
     >
       <div style={{ maxWidth: 1240, margin: '0 auto' }}>
+        {internalPreviewAllowed && (
+          <div
+            style={{
+              marginBottom: 14,
+              border: '1px solid rgba(53,45,235,0.22)',
+              background: 'rgba(53,45,235,0.06)',
+              color: 'var(--primary)',
+              borderRadius: 14,
+              padding: '10px 12px',
+              fontSize: 12,
+              fontWeight: 900,
+            }}
+          >
+            Internal preview — you are viewing the employer portal as the client
+            would see it. This is not a client login.
+          </div>
+        )}
+
         <Link
-          href="/employer-portal"
+          href={
+            internalPreviewAllowed && previewApplicationId
+              ? `/crm/applications/${previewApplicationId}`
+              : '/employer-portal'
+          }
           style={{
             color: 'var(--primary)',
             textDecoration: 'none',
@@ -315,7 +427,7 @@ export default async function EmployerPortalVacancyPage({ params }: Props) {
             fontWeight: 900,
           }}
         >
-          ← Back to vacancies
+{internalPreviewAllowed ? '← Back to application' : '← Back to vacancies'}
         </Link>
 
         <section

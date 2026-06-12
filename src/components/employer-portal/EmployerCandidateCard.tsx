@@ -387,6 +387,14 @@ export default function EmployerCandidateCard({
   const [loadingCvPreview, setLoadingCvPreview] = useState(false)
   const [cvPreviewError, setCvPreviewError] = useState<string | null>(null)
 
+  const isInternalPreview =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('crm_preview') === '1'
+
+  const documentUrlEndpoint = isInternalPreview
+    ? '/api/crm/document-signed-url'
+    : '/api/employer-portal/document-signed-url'
+
   const candidateName = getCandidateName(candidate)
 
   const interviewArranged =
@@ -421,7 +429,7 @@ export default function EmployerCandidateCard({
       setCvPreviewError(null)
 
       try {
-        const res = await fetch('/api/employer-portal/document-signed-url', {
+        const res = await fetch(documentUrlEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -636,7 +644,7 @@ export default function EmployerCandidateCard({
     setOpeningDocumentId(doc.id)
 
     try {
-      const res = await fetch('/api/employer-portal/document-signed-url', {
+      const res = await fetch(documentUrlEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

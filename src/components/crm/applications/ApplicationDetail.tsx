@@ -3229,6 +3229,19 @@ function PortalPresentationTab({
 
             <button
               type="button"
+              className="crm-btn-ghost crm-btn-sm"
+              onClick={() =>
+                window.open(
+                  `/employer-portal/vacancies/${v?.id}?crm_preview=1&application_id=${app.id}`,
+                  '_blank',
+                )
+              }
+            >
+              View as employer ↗
+            </button>
+
+            <button
+              type="button"
               className="crm-btn-primary crm-btn-sm"
               onClick={confirmAndSubmit}
             >
