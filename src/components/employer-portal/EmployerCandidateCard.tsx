@@ -1103,9 +1103,62 @@ export default function EmployerCandidateCard({
                   const canDownload = canDownloadSupportingDocument(doc)
                   const isOpening = openingDocumentId === doc.id
 
-                  // Hide references until the placement has been created, same as supporting documents.
+                  // Before placement, show that references are on file but do not reveal the details.
                   if (isReference && !canDownloadDocuments) {
-                    return null
+                    return (
+                      <div
+                        key={doc.id}
+                        style={{
+                          border: '1px solid var(--border-light)',
+                          borderRadius: 12,
+                          padding: '10px 12px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          alignItems: 'center',
+                          background: '#ffffff',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 13,
+                              fontWeight: 900,
+                              color: 'var(--text-dark)',
+                            }}
+                          >
+                            Reference details
+                          </p>
+
+                          <p
+                            style={{
+                              margin: 0,
+                              marginTop: 2,
+                              fontSize: 12,
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Reference details are on file and will be available after placement.
+                          </p>
+                        </div>
+
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            borderRadius: 999,
+                            padding: '4px 8px',
+                            background: '#f3f4f6',
+                            color: 'var(--text-muted)',
+                            fontSize: 10,
+                            fontWeight: 900,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          On file
+                        </span>
+                      </div>
+                    )
                   }
 
                   // Compact reference row
