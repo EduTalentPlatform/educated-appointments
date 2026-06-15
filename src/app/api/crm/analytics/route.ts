@@ -7,7 +7,24 @@ export const dynamic = 'force-dynamic'
 const ALLOWED_RANGES = new Set(['7daysAgo', '30daysAgo', '90daysAgo'])
 
 function cleanPrivateKey(value: string) {
-  return value.replace(/\\n/g, '\n')
+  return value
+    .replace(/^"|"$/g, '')
+    .replace(/\\n/g, '\n')
+    .trim()
+}
+
+function cleanPropertyId(value: string) {
+  return value.replace(/^properties\//, '').trim()
+}
+
+function getMissingConfig() {
+  return [
+    ['GOOGLE_ANALYTICS_PROPERTY_ID', process.env.GOOGLE_ANALYTICS_PROPERTY_ID],
+    ['GOOGLE_ANALYTICS_CLIENT_EMAIL', process.env.GOOGLE_ANALYTICS_CLIENT_EMAIL],
+    ['GOOGLE_ANALYTICS_PRIVATE_KEY', process.env.GOOGLE_ANALYTICS_PRIVATE_KEY],
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key)
 }
 
 function getAnalyticsClient() {
@@ -20,7 +37,7 @@ function getAnalyticsClient() {
 
   return new BetaAnalyticsDataClient({
     credentials: {
-      client_email: clientEmail,
+      client_email: clientEmail.trim(),
       private_key: cleanPrivateKey(privateKey),
     },
   })
@@ -52,22 +69,32 @@ function formatRows(rows: any[] | null | undefined, dimensions: string[]) {
 
 export async function GET(request: Request) {
   try {
-    const propertyId = process.env.GOOGLE_ANALYTICS_PROPERTY_ID
+    const missingConfig = getMissingConfig()
+
+    if (missingConfig.length > 0) {
+      return NextResponse.json({
+        configured: false,
+        message: `Google Analytics is missing: ${missingConfig.join(', ')}.`,
+      })
+    }
+
+    const rawPropertyId = process.env.GOOGLE_ANALYTICS_PROPERTY_ID || ''
+    const propertyId = cleanPropertyId(rawPropertyId)
     const client = getAnalyticsClient()
+
+    if (!client) {
+      return NextResponse.json({
+        configured: false,
+        message:
+          'Google Analytics client could not be created. Check the client email and private key.',
+      })
+    }
 
     const url = new URL(request.url)
     const requestedRange = url.searchParams.get('range') || '30daysAgo'
     const startDate = ALLOWED_RANGES.has(requestedRange)
       ? requestedRange
       : '30daysAgo'
-
-    if (!propertyId || !client) {
-      return NextResponse.json({
-        configured: false,
-        message:
-          'Google Analytics is not configured yet. Add GOOGLE_ANALYTICS_PROPERTY_ID, GOOGLE_ANALYTICS_CLIENT_EMAIL and GOOGLE_ANALYTICS_PRIVATE_KEY to your environment variables.',
-      })
-    }
 
     const property = `properties/${propertyId}`
 
@@ -140,19 +167,17 @@ export async function GET(request: Request) {
 
     const summaryRow = summaryResponse.rows?.[0]
 
-    const summary = {
-      activeUsers: metricValue(summaryRow, 0),
-      newUsers: metricValue(summaryRow, 1),
-      sessions: metricValue(summaryRow, 2),
-      views: metricValue(summaryRow, 3),
-      engagementRate: metricValue(summaryRow, 4),
-      averageSessionDuration: metricValue(summaryRow, 5),
-    }
-
     return NextResponse.json({
       configured: true,
       range: startDate,
-      summary,
+      summary: {
+        activeUsers: metricValue(summaryRow, 0),
+        newUsers: metricValue(summaryRow, 1),
+        sessions: metricValue(summaryRow, 2),
+        views: metricValue(summaryRow, 3),
+        engagementRate: metricValue(summaryRow, 4),
+        averageSessionDuration: metricValue(summaryRow, 5),
+      },
       topPages: formatRows(topPagesResponse.rows, ['pageTitle', 'pagePath']),
       channels: formatRows(channelsResponse.rows, [
         'sessionDefaultChannelGroup',
