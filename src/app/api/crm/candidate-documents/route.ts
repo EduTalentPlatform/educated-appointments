@@ -192,9 +192,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const updates: Record<string, any> = {
-  updated_at: new Date().toISOString(),
-}
+    const updates: Record<string, any> = {}
 
 if ('name' in body || 'document_name' in body || 'documentName' in body) {
   const documentName = cleanString(
@@ -266,7 +264,7 @@ const docType = cleanString(body.doc_type || body.docType)
       updates.visibility = cleanString(body.visibility)
     }
 
-    if (Object.keys(updates).length === 1) {
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
         { error: 'No document updates were provided.' },
         { status: 400 },
