@@ -507,6 +507,9 @@ const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null
   const [releasingDocumentId, setReleasingDocumentId] = useState<string | null>(null)
   const [updatingPortalDocumentId, setUpdatingPortalDocumentId] = useState<string | null>(null)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
+  const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null)
+const [renameDocumentValue, setRenameDocumentValue] = useState('')
+const [savingDocumentRenameId, setSavingDocumentRenameId] = useState<string | null>(null)
 
   const [showDocForm, setShowDocForm] = useState(false)
   const [docForm, setDocForm] = useState<DocUploadForm>({
@@ -1325,8 +1328,71 @@ if (json?.data) {
   setReferenceForm(emptyReferenceForm())
   setUploadingDoc(false)
 }
+function startRenameDocument(document: CandidateDocument) {
+  setRenamingDocumentId(document.id)
+  setRenameDocumentValue(document.name || '')
+}
 
-  async function updateDocumentType(documentId: string, docType: string) {
+function cancelRenameDocument() {
+  setRenamingDocumentId(null)
+  setRenameDocumentValue('')
+}
+
+async function saveDocumentRename(documentId: string) {
+  const nextName = renameDocumentValue.trim()
+
+  if (!nextName) {
+    alert('Please enter a document name.')
+    return
+  }
+
+  setSavingDocumentRenameId(documentId)
+
+  const res = await fetch('/api/crm/candidate-documents', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: documentId,
+      name: nextName,
+    }),
+  })
+
+  const json = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(json?.error || 'Could not rename document.')
+    setSavingDocumentRenameId(null)
+    return
+  }
+
+  const savedName = json?.data?.name || nextName
+
+  setCandidateDocuments(current =>
+    current.map(doc =>
+      doc.id === documentId
+        ? {
+            ...doc,
+            name: savedName,
+          }
+        : doc,
+    ),
+  )
+
+  setSelectedDocument(current =>
+    current?.id === documentId
+      ? {
+          ...current,
+          name: savedName,
+        }
+      : current,
+  )
+
+  setRenamingDocumentId(null)
+  setRenameDocumentValue('')
+  setSavingDocumentRenameId(null)
+}
+  
+async function updateDocumentType(documentId: string, docType: string) {
     setUpdatingDocumentId(documentId)
 
     const res = await fetch('/api/crm/candidate-documents', {
@@ -2216,6 +2282,13 @@ async function deleteActivity(activityId: string) {
 loadingSelectedDocumentUrl={loadingSelectedDocumentUrl}
 selectedDocumentUrlError={selectedDocumentUrlError}
 openSelectedDocument={openSelectedDocument}
+renamingDocumentId={renamingDocumentId}
+renameDocumentValue={renameDocumentValue}
+setRenameDocumentValue={setRenameDocumentValue}
+savingDocumentRenameId={savingDocumentRenameId}
+startRenameDocument={startRenameDocument}
+cancelRenameDocument={cancelRenameDocument}
+saveDocumentRename={saveDocumentRename}
 />
       )}
 
@@ -3390,6 +3463,13 @@ type DocumentsTabProps = {
   loadingSelectedDocumentUrl: boolean
   selectedDocumentUrlError: string | null
   openSelectedDocument: () => Promise<void>
+  renamingDocumentId: string | null
+renameDocumentValue: string
+setRenameDocumentValue: Dispatch<SetStateAction<string>>
+savingDocumentRenameId: string | null
+startRenameDocument: (document: CandidateDocument) => void
+cancelRenameDocument: () => void
+saveDocumentRename: (documentId: string) => Promise<void>
 }
 
 function DocumentsTab({
@@ -3425,6 +3505,13 @@ function DocumentsTab({
   loadingSelectedDocumentUrl,
   selectedDocumentUrlError,
   openSelectedDocument,
+  renamingDocumentId,
+renameDocumentValue,
+setRenameDocumentValue,
+savingDocumentRenameId,
+startRenameDocument,
+cancelRenameDocument,
+saveDocumentRename,
 }: DocumentsTabProps) {
   const selectedFileUrl = selectedDocumentUrl || selectedDocSafe?.file_url || ''
 
@@ -3870,30 +3957,90 @@ function formatDateTime(value?: string | null) {
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ marginBottom: 8 }}>
-                          <p
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 900,
-                              color: 'var(--text-dark)',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            {doc.name}
-                          </p>
+                        <div style={{ marginBottom: 8 }} onClick={event => event.stopPropagation()}>
+  {renamingDocumentId === doc.id ? (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <input
+        className="crm-input"
+        value={renameDocumentValue}
+        onChange={event => setRenameDocumentValue(event.target.value)}
+        onKeyDown={event => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            saveDocumentRename(doc.id)
+          }
 
-                          <p
-                            style={{
-                              fontSize: 11,
-                              color: 'var(--text-muted)',
-                              marginTop: 3,
-                            }}
-                          >
-                            Added {formatDate(doc.created_at)}
-                          </p>
-                        </div>
+          if (event.key === 'Escape') {
+            cancelRenameDocument()
+          }
+        }}
+        autoFocus
+      />
+
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          type="button"
+          className="crm-btn-primary crm-btn-sm"
+          onClick={() => saveDocumentRename(doc.id)}
+          disabled={savingDocumentRenameId === doc.id}
+        >
+          {savingDocumentRenameId === doc.id ? 'Saving...' : 'Save'}
+        </button>
+
+        <button
+          type="button"
+          className="crm-btn-ghost crm-btn-sm"
+          onClick={cancelRenameDocument}
+          disabled={savingDocumentRenameId === doc.id}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : (
+    <>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
+        <p
+          style={{
+            fontSize: 13,
+            fontWeight: 900,
+            color: 'var(--text-dark)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {doc.name}
+        </p>
+
+        <button
+          type="button"
+          className="crm-btn-ghost crm-btn-sm"
+          onClick={() => startRenameDocument(doc)}
+        >
+          Rename
+        </button>
+      </div>
+
+      <p
+        style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          marginTop: 3,
+        }}
+      >
+        Added {formatDate(doc.created_at)}
+      </p>
+    </>
+  )}
+</div>
 
                         <div
                           style={{
