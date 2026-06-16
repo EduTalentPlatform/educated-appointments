@@ -3957,14 +3957,19 @@ function formatDateTime(value?: string | null) {
                           cursor: 'pointer',
                         }}
                       >
-                        <div style={{ marginBottom: 8 }} onClick={event => event.stopPropagation()}>
+                        <div style={{ marginBottom: 8 }}>
   {renamingDocumentId === doc.id ? (
-    <div style={{ display: 'grid', gap: 6 }}>
+    <div
+      style={{ display: 'grid', gap: 6 }}
+      onClick={event => event.stopPropagation()}
+    >
       <input
         className="crm-input"
         value={renameDocumentValue}
         onChange={event => setRenameDocumentValue(event.target.value)}
         onKeyDown={event => {
+          event.stopPropagation()
+
           if (event.key === 'Enter') {
             event.preventDefault()
             saveDocumentRename(doc.id)
@@ -4023,7 +4028,10 @@ function formatDateTime(value?: string | null) {
         <button
           type="button"
           className="crm-btn-ghost crm-btn-sm"
-          onClick={() => startRenameDocument(doc)}
+          onClick={event => {
+            event.stopPropagation()
+            startRenameDocument(doc)
+          }}
         >
           Rename
         </button>
