@@ -193,10 +193,25 @@ export async function PATCH(request: NextRequest) {
     }
 
     const updates: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-    }
+  updated_at: new Date().toISOString(),
+}
 
-    const docType = cleanString(body.doc_type || body.docType)
+if ('name' in body || 'document_name' in body || 'documentName' in body) {
+  const documentName = cleanString(
+    body.name || body.document_name || body.documentName,
+  )
+
+  if (!documentName) {
+    return NextResponse.json(
+      { error: 'Document name cannot be blank.' },
+      { status: 400 },
+    )
+  }
+
+  updates.name = documentName
+}
+
+const docType = cleanString(body.doc_type || body.docType)
 
     if (docType) {
       updates.doc_type = docType
