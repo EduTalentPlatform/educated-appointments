@@ -344,6 +344,20 @@ export default function LeadDetail({
   )
   const primaryContact = contacts.find(contact => contact.is_primary) ?? contacts[0]
 
+const leadLevelContact =
+  lead.contact_name || lead.contact_title || lead.email || lead.phone || lead.linkedin
+    ? {
+        name: lead.contact_name || 'Main lead contact',
+        title: lead.contact_title,
+        email: lead.email,
+        phone: lead.phone,
+        linkedin: lead.linkedin,
+        role_type: 'Lead record',
+      }
+    : null
+
+const hasVisibleContactInfo = Boolean(leadLevelContact) || contacts.length > 0
+
   const actIcon = (type: string) =>
     ACTIVITY_TYPES.find(activity => activity.id === type)?.icon ?? '📝'
 
@@ -1744,120 +1758,220 @@ export default function LeadDetail({
           </div>
 
           {/* Contacts */}
-          <div className="crm-card">
-            <div className="crm-card-header">
-              <h3 className="crm-card-title">Contacts</h3>
+<div className="crm-card">
+  <div className="crm-card-header">
+    <h3 className="crm-card-title">Contacts</h3>
 
-              <button
-                type="button"
-                className="crm-btn-primary crm-btn-sm"
-                onClick={() => setShowContactForm(true)}
+    <button
+      type="button"
+      className="crm-btn-primary crm-btn-sm"
+      onClick={() => setShowContactForm(true)}
+    >
+      + Add
+    </button>
+  </div>
+
+  {!hasVisibleContactInfo && (
+    <p className="crm-empty">
+      No contact details recorded yet. Add a contact or update the lead details.
+    </p>
+  )}
+
+  {leadLevelContact && (
+    <div
+      className="ld-contact-card"
+      style={{
+        borderColor: 'rgba(53,45,235,0.28)',
+        background: 'linear-gradient(180deg, #ffffff 0%, #f8f7ff 100%)',
+      }}
+    >
+      <div className="ld-contact-top">
+        <div className="ld-contact-avatar">
+          {leadLevelContact.name
+            .split(' ')
+            .map(part => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()}
+        </div>
+
+        <div className="ld-contact-info">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <p className="ld-contact-name">{leadLevelContact.name}</p>
+
+            <span
+              className="crm-badge"
+              style={{
+                background: 'var(--primary-light)',
+                color: 'var(--primary)',
+                fontSize: 9,
+              }}
+            >
+              Main lead contact
+            </span>
+          </div>
+
+          <p className="ld-contact-title">
+            {leadLevelContact.title || 'Contact title not recorded'}
+          </p>
+        </div>
+      </div>
+
+      <div className="ld-contact-links" style={{ marginTop: 12 }}>
+        {leadLevelContact.phone ? (
+          <a
+            href={`tel:${leadLevelContact.phone}`}
+            className="ld-contact-link"
+            style={{ fontWeight: 800 }}
+          >
+            📞 {leadLevelContact.phone}
+          </a>
+        ) : (
+          <span className="ld-contact-link" style={{ color: 'var(--text-muted)' }}>
+            📞 No phone recorded
+          </span>
+        )}
+
+        {leadLevelContact.email ? (
+          <a
+            href={`mailto:${leadLevelContact.email}`}
+            className="ld-contact-link"
+            style={{ fontWeight: 800 }}
+          >
+            ✉️ {leadLevelContact.email}
+          </a>
+        ) : (
+          <span className="ld-contact-link" style={{ color: 'var(--text-muted)' }}>
+            ✉️ No email recorded
+          </span>
+        )}
+
+        {leadLevelContact.linkedin && (
+          <a
+            href={leadLevelContact.linkedin}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ld-contact-link"
+          >
+            💼 LinkedIn
+          </a>
+        )}
+      </div>
+    </div>
+  )}
+
+  {contacts.map(contact => (
+    <div key={contact.id} className="ld-contact-card">
+      <div className="ld-contact-top">
+        <div className="ld-contact-avatar">
+          {contact.name
+            .split(' ')
+            .map(part => part[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()}
+        </div>
+
+        <div className="ld-contact-info">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <p className="ld-contact-name">{contact.name}</p>
+
+            {contact.is_primary && (
+              <span
+                className="crm-badge"
+                style={{
+                  background: '#e8f5e8',
+                  color: '#217822',
+                  fontSize: 9,
+                }}
               >
-                + Add
-              </button>
-            </div>
+                Primary
+              </span>
+            )}
+          </div>
 
-            {contacts.length === 0 && <p className="crm-empty">No contacts yet.</p>}
+          <p className="ld-contact-title">
+            {contact.title || 'Contact title not recorded'}
+          </p>
 
-            {contacts.map(contact => (
-              <div key={contact.id} className="ld-contact-card">
-                <div className="ld-contact-top">
-                  <div className="ld-contact-avatar">
-                    {contact.name
-                      .split(' ')
-                      .map(part => part[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </div>
+          <span
+            className="crm-badge"
+            style={{
+              background: 'var(--primary-light)',
+              color: 'var(--primary)',
+              fontSize: 9,
+              marginTop: 3,
+            }}
+          >
+            {contact.role_type}
+          </span>
+        </div>
 
-                  <div className="ld-contact-info">
-                    <div
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <p className="ld-contact-name">{contact.name}</p>
+        <div className="ld-contact-actions">
+          {!contact.is_primary && (
+            <button
+              type="button"
+              className="crm-icon-btn"
+              onClick={() => setPrimaryContact(contact.id)}
+              title="Set as primary"
+            >
+              ★
+            </button>
+          )}
 
-                      {contact.is_primary && (
-                        <span
-                          className="crm-badge"
-                          style={{
-                            background: '#e8f5e8',
-                            color: '#217822',
-                            fontSize: 9,
-                          }}
-                        >
-                          Primary
-                        </span>
-                      )}
-                    </div>
+          <button
+            type="button"
+            className="crm-icon-btn crm-icon-btn-danger"
+            onClick={() => deleteContact(contact.id)}
+            title="Delete"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
 
-                    <p className="ld-contact-title">{contact.title}</p>
+      <div className="ld-contact-links" style={{ marginTop: 12 }}>
+        {contact.phone ? (
+          <a
+            href={`tel:${contact.phone}`}
+            className="ld-contact-link"
+            style={{ fontWeight: 800 }}
+          >
+            📞 {contact.phone}
+          </a>
+        ) : (
+          <span className="ld-contact-link" style={{ color: 'var(--text-muted)' }}>
+            📞 No phone recorded
+          </span>
+        )}
 
-                    <span
-                      className="crm-badge"
-                      style={{
-                        background: 'var(--primary-light)',
-                        color: 'var(--primary)',
-                        fontSize: 9,
-                        marginTop: 3,
-                      }}
-                    >
-                      {contact.role_type}
-                    </span>
-                  </div>
+        {contact.email ? (
+          <a
+            href={`mailto:${contact.email}`}
+            className="ld-contact-link"
+            style={{ fontWeight: 800 }}
+          >
+            ✉️ {contact.email}
+          </a>
+        ) : (
+          <span className="ld-contact-link" style={{ color: 'var(--text-muted)' }}>
+            ✉️ No email recorded
+          </span>
+        )}
 
-                  <div className="ld-contact-actions">
-                    {!contact.is_primary && (
-                      <button
-                        type="button"
-                        className="crm-icon-btn"
-                        onClick={() => setPrimaryContact(contact.id)}
-                        title="Set as primary"
-                      >
-                        ★
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      className="crm-icon-btn crm-icon-btn-danger"
-                      onClick={() => deleteContact(contact.id)}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                <div className="ld-contact-links">
-                  {contact.email && (
-                    <a
-                      href={`mailto:${contact.email}`}
-                      className="ld-contact-link"
-                    >
-                      ✉️ {contact.email}
-                    </a>
-                  )}
-
-                  {contact.phone && (
-                    <a href={`tel:${contact.phone}`} className="ld-contact-link">
-                      📞 {contact.phone}
-                    </a>
-                  )}
-
-                  {contact.linkedin && (
-                    <a
-                      href={contact.linkedin}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ld-contact-link"
-                    >
-                      💼 LinkedIn
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+        {contact.linkedin && (
+          <a
+            href={contact.linkedin}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ld-contact-link"
+          >
+            💼 LinkedIn
+          </a>
+        )}
+      </div>
+    </div>
+  ))}
 
             {showContactForm && (
               <form onSubmit={addContact} className="ld-contact-form">
