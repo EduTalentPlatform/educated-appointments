@@ -4871,8 +4871,20 @@ function ActivityTab({
                   </div>
 
                   {activity.content && (
-                    <p className="ld-activity-content">{activity.content}</p>
-                  )}
+  <div className="ld-activity-content">
+    {activity.content.split('\n').map((line, index) => {
+      const isEmailOpenedLine =
+        index === 0 &&
+        line.trim().toLowerCase() === 'email opened by recipient.'
+
+      return (
+        <div key={`${activity.id}-content-${index}`}>
+          {isEmailOpenedLine ? <strong>{line}</strong> : line}
+        </div>
+      )
+    })}
+  </div>
+)}
 
                   <button
                     type="button"
