@@ -491,13 +491,15 @@ const previewOnly = body.preview_only === true || body.previewOnly === true
       roleContext,
     })
 
-    await sendEmail({
-      to: candidate.email,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-      replyTo: 'joseph@educatedappointments.co.uk',
-    })
+    const emailResult = await sendEmail({
+  to: candidate.email,
+  subject: email.subject,
+  html: email.html,
+  text: email.text,
+  replyTo: 'joseph@educatedappointments.co.uk',
+})
+
+const resendEmailId = emailResult?.id || emailResult?.data?.id || null
 
     const sentAt = new Date().toISOString()
 
@@ -535,6 +537,24 @@ const previewOnly = body.preview_only === true || body.previewOnly === true
         .filter(Boolean)
         .join('\n'),
     })
+
+    if (resendEmailId) {
+  await supabase.from('crm_email_tracking').insert({
+    resend_email_id: resendEmailId,
+    candidate_id: candidate.id,
+    related_application_id: applicationId || null,
+    related_upload_link_id: uploadLink.id,
+    to_email: candidate.email,
+    subject: email.subject,
+    email_type: roleContext
+      ? 'role_candidate_portal_upload_link'
+      : 'candidate_portal_upload_link',
+    status: 'sent',
+    sent_at: sentAt,
+    last_event: 'sent',
+    last_event_at: sentAt,
+  })
+}
 
     return NextResponse.json({
       uploadLink: updatedUploadLink || uploadLink,
