@@ -43,6 +43,8 @@ type RoleEmailContext = {
   jobDescription: string
 }
 
+type RequestMode = 'initial' | 'interview_chase'
+
 function getSiteUrl() {
   return (
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -123,37 +125,59 @@ function buildCandidatePortalEmail({
   requestedDocumentTypes,
   message,
   roleContext,
+  requestMode,
 }: {
   firstName: string
   uploadUrl: string
   requestedDocumentTypes: string[]
   message: string | null
   roleContext?: RoleEmailContext | null
+  requestMode: RequestMode
 }) {
   const requestedLabels = requestedDocumentTypes
     .map(type => documentLabels[type] || type)
     .filter(Boolean)
 
-  const subject = roleContext?.roleTitle
+  const isInterviewChase = requestMode === 'interview_chase'
+
+const subject = isInterviewChase
+  ? 'Reminder: documents required ahead of your client interview'
+  : roleContext?.roleTitle
     ? `Educated Appointments - ${roleContext.roleTitle} information & secure candidate portal`
     : 'Educated Appointments - Secure Document Upload & Privacy Confirmation'
 
-  const introText = roleContext
+  const introText = isInterviewChase
+  ? [
+      'Just a quick reminder to upload the outstanding documents requested below.',
+      'As you are now booked in for interview with our client, we need to make sure everything is ready ahead of the next stage.',
+      '',
+    ]
+  : roleContext
     ? [
         'Further to our conversation, please find the details for the opportunity we discussed below.',
         '',
       ]
     : []
 
-  const portalActionText = [
-    'Please complete your candidate portal using the secure link below:',
-    '',
-    'IMPORTANT - COMPLETE YOUR CANDIDATE PORTAL HERE:',
-    uploadUrl,
-    '',
-    'This allows us to keep your application details, documents and compliance information in one secure place.',
-    '',
-  ]
+  const portalActionText = isInterviewChase
+  ? [
+      'Please use the secure link below to upload the outstanding documents:',
+      '',
+      'UPLOAD YOUR DOCUMENTS HERE:',
+      uploadUrl,
+      '',
+      'This helps us make sure your file is complete ahead of your client interview.',
+      '',
+    ]
+  : [
+      'Please complete your candidate portal using the secure link below:',
+      '',
+      'IMPORTANT - COMPLETE YOUR CANDIDATE PORTAL HERE:',
+      uploadUrl,
+      '',
+      'This allows us to keep your application details, documents and compliance information in one secure place.',
+      '',
+    ]
 
   const roleText: string[] = []
 
@@ -232,16 +256,18 @@ function buildCandidatePortalEmail({
   const portalCtaHtml = `
     <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:18px;margin:18px 0 22px 0;">
       <p style="margin:0 0 8px 0;font-size:16px;">
-        <strong>Action required: please complete your candidate portal</strong>
+        <strong>${isInterviewChase ? 'Reminder: documents required ahead of your client interview' : 'Action required: please complete your candidate portal'}</strong>
       </p>
 
       <p style="margin:0 0 14px 0;">
-        Please use the secure link below so we can progress your application and keep your documents, key details and compliance information in one place.
+        ${isInterviewChase
+  ? 'Please use the secure link below to upload the outstanding documents so we can make sure everything is ready ahead of your client interview.'
+  : 'Please use the secure link below so we can progress your application and keep your documents, key details and compliance information in one place.'}
       </p>
 
       <p style="margin:0 0 12px 0;">
         <a href="${escapeHtml(uploadUrl)}" style="display:inline-block;background:#352DEB;color:#ffffff;text-decoration:none;padding:11px 18px;border-radius:8px;font-weight:700;">
-          Complete candidate portal
+          ${isInterviewChase ? 'Upload outstanding documents' : 'Complete candidate portal'}
         </a>
       </p>
 
@@ -288,7 +314,9 @@ function buildCandidatePortalEmail({
     `
     : ''
 
-  const introHtml = roleContext
+  const introHtml = isInterviewChase
+  ? `<p style="margin:0 0 16px 0;">Just a quick reminder to upload the outstanding documents requested below. As you are now booked in for interview with our client, we need to make sure everything is ready ahead of the next stage.</p>`
+  : roleContext
     ? `<p style="margin:0 0 16px 0;">Further to our conversation, please find the details for the opportunity we discussed below.</p>`
     : `<p style="margin:0 0 16px 0;">Please complete your secure candidate portal using the link below.</p>`
 
@@ -332,6 +360,10 @@ export async function POST(request: NextRequest) {
 const applicationId = clean(body.application_id || body.applicationId)
 const message = clean(body.message) || null
 const previewOnly = body.preview_only === true || body.previewOnly === true
+const requestMode: RequestMode =
+  body.request_mode === 'interview_chase' || body.requestMode === 'interview_chase'
+    ? 'interview_chase'
+    : 'initial'
 
     const requestedDocumentTypes: string[] = Array.isArray(
       body.requested_document_types,
@@ -450,12 +482,13 @@ const previewOnly = body.preview_only === true || body.previewOnly === true
 
       const firstName = candidate.first_name || 'there'
       const emailPreview = buildCandidatePortalEmail({
-        firstName,
-        uploadUrl: previewUploadUrl,
-        requestedDocumentTypes,
-        message,
-        roleContext,
-      })
+  firstName,
+  uploadUrl: previewUploadUrl,
+  requestedDocumentTypes,
+  message,
+  roleContext,
+  requestMode,
+})
 
       return NextResponse.json({
         preview: true,
@@ -484,12 +517,13 @@ const previewOnly = body.preview_only === true || body.previewOnly === true
 
     const firstName = candidate.first_name || 'there'
     const email = buildCandidatePortalEmail({
-      firstName,
-      uploadUrl,
-      requestedDocumentTypes,
-      message,
-      roleContext,
-    })
+  firstName,
+  uploadUrl,
+  requestedDocumentTypes,
+  message,
+  roleContext,
+  requestMode,
+})
 
     const emailResult = await sendEmail({
   to: candidate.email,
@@ -517,9 +551,11 @@ const resendEmailId = emailResult?.id || emailResult?.data?.id || null
       candidate_id: candidate.id,
       activity_type: 'email',
       content: [
-        roleContext
-          ? 'Role-specific candidate portal link sent.'
-          : 'Candidate portal link sent.',
+        requestMode === 'interview_chase'
+  ? 'Candidate document chase sent ahead of client interview.'
+  : roleContext
+    ? 'Role-specific candidate portal link sent.'
+    : 'Candidate portal link sent.',
         `Email: ${candidate.email}`,
         roleContext?.roleTitle ? `Role: ${roleContext.roleTitle}` : null,
         roleContext?.employerName ? `Employer: ${roleContext.employerName}` : null,
@@ -546,7 +582,10 @@ const resendEmailId = emailResult?.id || emailResult?.data?.id || null
     related_upload_link_id: uploadLink.id,
     to_email: candidate.email,
     subject: email.subject,
-    email_type: roleContext
+    email_type:
+  requestMode === 'interview_chase'
+    ? 'candidate_document_interview_chase'
+    : roleContext
       ? 'role_candidate_portal_upload_link'
       : 'candidate_portal_upload_link',
     status: 'sent',
@@ -562,9 +601,12 @@ const resendEmailId = emailResult?.id || emailResult?.data?.id || null
       candidate,
       sent: true,
       roleContext,
-      message: roleContext
-        ? `Role-specific candidate portal email sent to ${candidate.email}.`
-        : `Candidate portal link sent to ${candidate.email}.`,
+      message:
+  requestMode === 'interview_chase'
+    ? `Candidate document chase sent to ${candidate.email}.`
+    : roleContext
+      ? `Role-specific candidate portal email sent to ${candidate.email}.`
+      : `Candidate portal link sent to ${candidate.email}.`,
     })
   } catch (error: any) {
     console.error('Create candidate upload link error:', error)

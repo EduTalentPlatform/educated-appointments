@@ -540,6 +540,9 @@ const [lastPortalMessage, setLastPortalMessage] = useState<string | null>(null)
 const [uploadLinkMessage, setUploadLinkMessage] = useState(
   'Please upload the requested documents using the secure link below.',
 )
+const [uploadLinkRequestMode, setUploadLinkRequestMode] = useState<
+  'initial' | 'interview_chase'
+>('initial')
 const [requestedDocumentTypes, setRequestedDocumentTypes] = useState<string[]>([
   'cv',
   'qualification',
@@ -1010,10 +1013,11 @@ async function createCandidateUploadLink() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      candidate_id: candidateRecord.id,
-      requested_document_types: requestedDocumentTypes,
-      message: uploadLinkMessage,
-    }),
+  candidate_id: candidateRecord.id,
+  requested_document_types: requestedDocumentTypes,
+  message: uploadLinkMessage,
+  request_mode: uploadLinkRequestMode,
+}),
   })
 
   const json = await res.json().catch(() => null)
@@ -2058,6 +2062,87 @@ async function deleteActivity(activityId: string) {
     </div>
 
     <div>
+  <label className="crm-label">Request type</label>
+
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      gap: 8,
+      marginTop: 8,
+    }}
+  >
+    <label
+      style={{
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        background: '#fff',
+        border:
+          uploadLinkRequestMode === 'initial'
+            ? '1.5px solid var(--primary)'
+            : '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        fontSize: 12,
+        fontWeight: 800,
+        color:
+          uploadLinkRequestMode === 'initial'
+            ? 'var(--primary)'
+            : 'var(--text-dark)',
+        cursor: 'pointer',
+      }}
+    >
+      <input
+        type="radio"
+        checked={uploadLinkRequestMode === 'initial'}
+        onChange={() => {
+          setUploadLinkRequestMode('initial')
+          setUploadLinkMessage(
+            'Please upload the requested documents using the secure link below.',
+          )
+        }}
+      />
+      Initial document request
+    </label>
+
+    <label
+      style={{
+        display: 'flex',
+        gap: 8,
+        alignItems: 'center',
+        background: '#fff',
+        border:
+          uploadLinkRequestMode === 'interview_chase'
+            ? '1.5px solid var(--primary)'
+            : '1px solid var(--border)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        fontSize: 12,
+        fontWeight: 800,
+        color:
+          uploadLinkRequestMode === 'interview_chase'
+            ? 'var(--primary)'
+            : 'var(--text-dark)',
+        cursor: 'pointer',
+      }}
+    >
+      <input
+        type="radio"
+        checked={uploadLinkRequestMode === 'interview_chase'}
+        onChange={() => {
+          setUploadLinkRequestMode('interview_chase')
+          setUploadLinkMessage(
+            'Just a reminder to upload the outstanding documents ahead of your client interview.',
+          )
+        }}
+      />
+      Chase documents for interview
+    </label>
+  </div>
+</div>
+
+    <div>
       <label className="crm-label">Documents requested</label>
 
       <div
@@ -2138,7 +2223,11 @@ async function deleteActivity(activityId: string) {
         onClick={createCandidateUploadLink}
         disabled={creatingUploadLink}
       >
-        {creatingUploadLink ? 'Sending...' : 'Send portal link'}
+        {creatingUploadLink
+  ? 'Sending...'
+  : uploadLinkRequestMode === 'interview_chase'
+    ? 'Send document chase'
+    : 'Send portal link'}
       </button>
     </div>
   </div>
