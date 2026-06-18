@@ -23,24 +23,6 @@ function eventDate(value: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
-    const expectedSecret = process.env.RESEND_WEBHOOK_SECRET
-
-    if (expectedSecret) {
-      const receivedSecret = request.nextUrl.searchParams.get('secret')
-
-      if (receivedSecret !== expectedSecret) {
-  return NextResponse.json(
-    {
-      error: 'Unauthorised webhook.',
-      hasExpectedSecret: Boolean(expectedSecret),
-      receivedSecretLength: receivedSecret?.length ?? 0,
-      expectedSecretLength: expectedSecret?.length ?? 0,
-    },
-    { status: 401 },
-  )
-}
-    }
-
     const event = await request.json()
     const supabase = getServiceClient()
 
