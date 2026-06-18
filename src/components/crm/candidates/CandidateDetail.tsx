@@ -415,6 +415,7 @@ function getActivelyLookingFromStatus(
 const DBS_STATUS_OPTIONS = [
   { value: '', label: 'Select...' },
   { value: 'not_completed', label: 'Not completed' },
+  { value: 'not_completed_disclosures', label: 'Not Completed - Disclosures' },
   {
     value: 'not_completed_happy_to_undertake_no_issues',
     label: 'Not completed but happy to undertake — no issues',
