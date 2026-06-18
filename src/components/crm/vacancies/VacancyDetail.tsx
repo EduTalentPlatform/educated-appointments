@@ -513,6 +513,11 @@ export default function VacancyDetail({
   const [manualAnon, setManualAnon] = useState(
     initialVacancy.anonymous_description ?? '',
   )
+  const [advertSalaryForm, setAdvertSalaryForm] = useState({
+  salary_display: initialVacancy.salary_display ?? '',
+  salary_min: initialVacancy.salary_min?.toString() ?? '',
+  salary_max: initialVacancy.salary_max?.toString() ?? '',
+})
   const [savingDesc, setSavingDesc] = useState(false)
   const [descSaved, setDescSaved] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -710,6 +715,12 @@ const [linkedinOutreachCopied, setLinkedinOutreachCopied] = useState(false)
     ...updates,
   }))
 
+  setAdvertSalaryForm({
+  salary_display: updates.salary_display ?? '',
+  salary_min: updates.salary_min?.toString() ?? '',
+  salary_max: updates.salary_max?.toString() ?? '',
+})
+
   setBriefing(current => ({
     ...current,
     work_type: updates.work_type ?? '',
@@ -867,44 +878,52 @@ const [linkedinOutreachCopied, setLinkedinOutreachCopied] = useState(false)
   return data
 }
   
-  async function saveDesc(advert: string, anon: string, goLive = false) {
-    setSavingDesc(true)
+  function parseSalaryNumber(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
 
-    const updates = {
-      employer_job_description:
-        jdText.trim() || vacancy.employer_job_description || advert,
-      description: advert,
-      anonymous_description: anon,
-      ...(goLive ? { status: 'live' } : {}),
-    }
+  const number = Number(trimmed)
+  return Number.isFinite(number) ? number : null
+}
 
-    const res = await patchVacancy(updates)
-    const json = await res.json().catch(() => null)
+async function saveDesc(advert: string, anon: string, goLive = false) {
+  setSavingDesc(true)
 
-    if (!res.ok) {
-      alert(json?.error || 'Could not save vacancy description.')
-      setSavingDesc(false)
-      return
-    }
-
-        setVacancy(v => ({
-      ...v,
-      ...updates,
-    }))
-
-    // After the website advert / anonymous pack is saved, also generate
-    // the confidential candidate vacancy pack. If this fails, the advert
-    // still remains saved.
-    try {
-      await generateCandidatePackAfterSave()
-    } catch (error) {
-      console.error('Candidate vacancy pack auto-generation failed:', error)
-    }
-
-    setDescSaved(true)
-    setTimeout(() => setDescSaved(false), 3000)
-    setSavingDesc(false)
+  const updates = {
+    employer_job_description:
+      jdText.trim() || vacancy.employer_job_description || advert,
+    description: advert,
+    anonymous_description: anon,
+    salary_display: advertSalaryForm.salary_display.trim() || null,
+    salary_min: parseSalaryNumber(advertSalaryForm.salary_min),
+    salary_max: parseSalaryNumber(advertSalaryForm.salary_max),
+    ...(goLive ? { status: 'live' } : {}),
   }
+
+  const res = await patchVacancy(updates)
+  const json = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(json?.error || 'Could not save vacancy description.')
+    setSavingDesc(false)
+    return
+  }
+
+  setVacancy(v => ({
+    ...v,
+    ...updates,
+  }))
+
+  try {
+    await generateCandidatePackAfterSave()
+  } catch (error) {
+    console.error('Candidate vacancy pack auto-generation failed:', error)
+  }
+
+  setDescSaved(true)
+  setTimeout(() => setDescSaved(false), 3000)
+  setSavingDesc(false)
+}
 
   async function saveEmployerJobDescription() {
     if (!jdText.trim()) return
@@ -1621,6 +1640,66 @@ const filteredCandidateOptions = useMemo(() => {
 
                 {descMode === 'ai' && (
                   <>
+                    <div className="crm-card" style={{ marginBottom: 14 }}>
+  <p className="crm-card-title" style={{ marginBottom: 10 }}>
+    Salary details
+  </p>
+
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 12,
+    }}
+  >
+    <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+      <label className="crm-label">Salary display</label>
+      <input
+        className="crm-input"
+        placeholder="e.g. £40,000 – £45,000"
+        value={advertSalaryForm.salary_display}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_display: e.target.value,
+          }))
+        }
+      />
+    </div>
+
+    <div className="crm-field">
+      <label className="crm-label">Salary minimum</label>
+      <input
+        className="crm-input"
+        type="number"
+        placeholder="40000"
+        value={advertSalaryForm.salary_min}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_min: e.target.value,
+          }))
+        }
+      />
+    </div>
+
+    <div className="crm-field">
+      <label className="crm-label">Salary maximum</label>
+      <input
+        className="crm-input"
+        type="number"
+        placeholder="45000"
+        value={advertSalaryForm.salary_max}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_max: e.target.value,
+          }))
+        }
+      />
+    </div>
+  </div>
+</div>
                     <p
                       style={{
                         fontSize: 13,
@@ -1884,6 +1963,66 @@ const filteredCandidateOptions = useMemo(() => {
                       gap: 14,
                     }}
                   >
+                    <div className="crm-card" style={{ marginBottom: 14 }}>
+  <p className="crm-card-title" style={{ marginBottom: 10 }}>
+    Salary details
+  </p>
+
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 12,
+    }}
+  >
+    <div className="crm-field" style={{ gridColumn: '1 / -1' }}>
+      <label className="crm-label">Salary display</label>
+      <input
+        className="crm-input"
+        placeholder="e.g. £40,000 – £45,000"
+        value={advertSalaryForm.salary_display}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_display: e.target.value,
+          }))
+        }
+      />
+    </div>
+
+    <div className="crm-field">
+      <label className="crm-label">Salary minimum</label>
+      <input
+        className="crm-input"
+        type="number"
+        placeholder="40000"
+        value={advertSalaryForm.salary_min}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_min: e.target.value,
+          }))
+        }
+      />
+    </div>
+
+    <div className="crm-field">
+      <label className="crm-label">Salary maximum</label>
+      <input
+        className="crm-input"
+        type="number"
+        placeholder="45000"
+        value={advertSalaryForm.salary_max}
+        onChange={e =>
+          setAdvertSalaryForm(form => ({
+            ...form,
+            salary_max: e.target.value,
+          }))
+        }
+      />
+    </div>
+  </div>
+</div>
                     <p
                       style={{
                         fontSize: 13,
