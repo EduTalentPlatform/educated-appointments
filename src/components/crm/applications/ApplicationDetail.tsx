@@ -709,6 +709,9 @@ const [rolePortalRequestedDocuments, setRolePortalRequestedDocuments] = useState
   'dbs',
   'reference',
 ])
+const [rolePortalRequestMode, setRolePortalRequestMode] = useState<
+  'initial' | 'interview_chase'
+>('initial')
 const [rolePortalMessage, setRolePortalMessage] = useState('')
 
 const [candidateDocumentUploadOpen, setCandidateDocumentUploadOpen] =
@@ -805,14 +808,13 @@ async function uploadCandidateDocumentFromApplication(event: React.FormEvent) {
 }
 
 
-  function buildRolePortalEmailPayload(previewOnly = false) {
+  function buildRolePortalEmailPayload(previewOnly: boolean) {
   return {
-    candidate_id: c.id,
+    candidate_id: c?.id,
     application_id: app.id,
     requested_document_types: rolePortalRequestedDocuments,
-    message:
-      rolePortalMessage.trim() ||
-      `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`,
+    message: rolePortalMessage,
+    request_mode: rolePortalRequestMode,
     preview_only: previewOnly,
   }
 }
@@ -920,7 +922,9 @@ setRolePortalEmailPreview(null)
         id: `local-role-portal-${Date.now()}`,
         activity_type: 'email',
         content: [
-          'Role-specific candidate portal email sent.',
+          rolePortalRequestMode === 'interview_chase'
+  ? 'Candidate document chase sent ahead of client interview.'
+  : 'Role-specific candidate portal email sent.',
           `Email: ${c.email}`,
           v?.title ? `Role: ${v.title}` : null,
           client?.company_name ? `Employer: ${client.company_name}` : null,
@@ -2372,121 +2376,207 @@ Kind regards,`
         </div>
 
         {rolePortalRequestOpen && (
-          <div
-            style={{
-              marginTop: 14,
-              paddingTop: 14,
-              borderTop: '1px solid var(--border-light)',
-              display: 'grid',
-              gap: 12,
+  <div
+    style={{
+      marginTop: 14,
+      paddingTop: 14,
+      borderTop: '1px solid var(--border-light)',
+      display: 'grid',
+      gap: 12,
+    }}
+  >
+    <div>
+      <label className="crm-label">Request type</label>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 8,
+          marginTop: 8,
+        }}
+      >
+        <label
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            background: '#fff',
+            border:
+              rolePortalRequestMode === 'initial'
+                ? '1.5px solid var(--primary)'
+                : '1px solid var(--border-light)',
+            borderRadius: 10,
+            padding: '10px 12px',
+            fontSize: 12,
+            fontWeight: 800,
+            color:
+              rolePortalRequestMode === 'initial'
+                ? 'var(--primary)'
+                : 'var(--text-dark)',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="radio"
+            checked={rolePortalRequestMode === 'initial'}
+            onChange={() => {
+              setRolePortalRequestMode('initial')
+              setRolePortalMessage('')
             }}
-          >
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: 10,
-              }}
-            >
-              {APPLICATION_PORTAL_DOCUMENT_TYPES.map(type => (
-                <label
-                  key={type.value}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: '1px solid var(--border-light)',
-                    background: rolePortalRequestedDocuments.includes(type.value)
-                      ? '#f3f0ff'
-                      : '#f9fafb',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={rolePortalRequestedDocuments.includes(type.value)}
-                    onChange={() =>
-                      toggleRolePortalRequestedDocument(type.value)
-                    }
-                  />
-                  {type.label}
-                </label>
-              ))}
-            </div>
+          />
+          Initial document request
+        </label>
 
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Optional message to candidate
-              </span>
-              <textarea
-                rows={3}
-                className="crm-textarea"
-                value={rolePortalMessage}
-                onChange={event => setRolePortalMessage(event.target.value)}
-                placeholder={`Please upload the requested documents for the ${v?.title || 'role'} opportunity.`}
-              />
-            </label>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Selected: {rolePortalRequestedDocuments.length || 0} document type
-                {rolePortalRequestedDocuments.length === 1 ? '' : 's'}
-              </p>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-  <button
-    type="button"
-    className="crm-btn-ghost"
-    onClick={previewRoleCandidatePortalEmail}
-    disabled={
-      previewingRolePortalEmail ||
-      sendingRolePortalEmail ||
-      rolePortalRequestedDocuments.length === 0
-    }
-  >
-    {previewingRolePortalEmail ? 'Building preview...' : 'Preview email'}
-  </button>
-
-  <button
-    type="button"
-    className="crm-btn-primary"
-    onClick={sendRoleCandidatePortalEmail}
-    disabled={
-      sendingRolePortalEmail ||
-      rolePortalRequestedDocuments.length === 0
-    }
-  >
-    {sendingRolePortalEmail ? 'Sending...' : 'Send role portal email'}
-  </button>
-</div>
-            </div>
-          </div>
-        )}
+        <label
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            background: '#fff',
+            border:
+              rolePortalRequestMode === 'interview_chase'
+                ? '1.5px solid var(--primary)'
+                : '1px solid var(--border-light)',
+            borderRadius: 10,
+            padding: '10px 12px',
+            fontSize: 12,
+            fontWeight: 800,
+            color:
+              rolePortalRequestMode === 'interview_chase'
+                ? 'var(--primary)'
+                : 'var(--text-dark)',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="radio"
+            checked={rolePortalRequestMode === 'interview_chase'}
+            onChange={() => {
+              setRolePortalRequestMode('interview_chase')
+              setRolePortalMessage(
+                'Just a reminder to upload the outstanding documents ahead of your client interview.',
+              )
+            }}
+          />
+          Chase documents for interview
+        </label>
       </div>
+    </div>
+
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: 10,
+      }}
+    >
+      {APPLICATION_PORTAL_DOCUMENT_TYPES.map(type => (
+        <label
+          key={type.value}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 12px',
+            borderRadius: 12,
+            border: '1px solid var(--border-light)',
+            background: rolePortalRequestedDocuments.includes(type.value)
+              ? '#f3f0ff'
+              : '#f9fafb',
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 700,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={rolePortalRequestedDocuments.includes(type.value)}
+            onChange={() => toggleRolePortalRequestedDocument(type.value)}
+          />
+          {type.label}
+        </label>
+      ))}
+    </div>
+
+    <label style={{ display: 'grid', gap: 6 }}>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: 'var(--text-muted)',
+        }}
+      >
+        Optional message to candidate
+      </span>
+      <textarea
+        rows={3}
+        className="crm-textarea"
+        value={rolePortalMessage}
+        onChange={event => setRolePortalMessage(event.target.value)}
+        placeholder={
+          rolePortalRequestMode === 'interview_chase'
+            ? 'Just a reminder to upload the outstanding documents ahead of your client interview.'
+            : `Please upload the requested documents for the ${v?.title || 'role'} opportunity.`
+        }
+      />
+    </label>
+
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          fontSize: 12,
+          color: 'var(--text-muted)',
+        }}
+      >
+        Selected: {rolePortalRequestedDocuments.length || 0} document type
+        {rolePortalRequestedDocuments.length === 1 ? '' : 's'}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="crm-btn-ghost"
+          onClick={previewRoleCandidatePortalEmail}
+          disabled={
+            previewingRolePortalEmail ||
+            sendingRolePortalEmail ||
+            rolePortalRequestedDocuments.length === 0
+          }
+        >
+          {previewingRolePortalEmail ? 'Building preview...' : 'Preview email'}
+        </button>
+
+        <button
+          type="button"
+          className="crm-btn-primary"
+          onClick={sendRoleCandidatePortalEmail}
+          disabled={
+            sendingRolePortalEmail ||
+            rolePortalRequestedDocuments.length === 0
+          }
+        >
+          {sendingRolePortalEmail
+            ? 'Sending...'
+            : rolePortalRequestMode === 'interview_chase'
+              ? 'Send document chase'
+              : 'Send role portal email'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+            </div>
             
             {rolePortalEmailPreview && (
   <div
