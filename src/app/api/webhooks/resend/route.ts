@@ -29,8 +29,16 @@ export async function POST(request: NextRequest) {
       const receivedSecret = request.nextUrl.searchParams.get('secret')
 
       if (receivedSecret !== expectedSecret) {
-        return NextResponse.json({ error: 'Unauthorised webhook.' }, { status: 401 })
-      }
+  return NextResponse.json(
+    {
+      error: 'Unauthorised webhook.',
+      hasExpectedSecret: Boolean(expectedSecret),
+      receivedSecretLength: receivedSecret?.length ?? 0,
+      expectedSecretLength: expectedSecret?.length ?? 0,
+    },
+    { status: 401 },
+  )
+}
     }
 
     const event = await request.json()
