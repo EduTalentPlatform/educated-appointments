@@ -61,6 +61,8 @@ type Lead = {
   status: string
   region: string | null
   sector: string | null
+  main_office_lat: number | null
+  main_office_lng: number | null
   created_at?: string | null
   updated_at: string
 }
@@ -82,6 +84,15 @@ const STATUS_COLOURS: Record<string, { bg: string; text: string }> = {
   proposal_sent:  { bg: '#fffbeb', text: '#d97706' },
   follow_up:      { bg: '#fffbeb', text: '#d97706' },
   lost:           { bg: '#fef2f2', text: '#e53e3e' },
+}
+
+function isLeadGeocoded(lead: Lead) {
+  return (
+    lead.main_office_lat !== null &&
+    lead.main_office_lat !== undefined &&
+    lead.main_office_lng !== null &&
+    lead.main_office_lng !== undefined
+  )
 }
 
 const SORT_OPTIONS = [
@@ -361,14 +372,14 @@ export default function LeadsList({ initialLeads }: Props) {
       <div className="crm-card crm-table-card">
         <table className="crm-table">
           <thead>
-            <tr>
-              <th>Company</th>
-              <th>Contact</th>
-              <th>Region</th>
-              <th>Status</th>
-              <th>Last updated</th>
-            </tr>
-          </thead>
+  <tr>
+    <th>Company</th>
+    <th>Region</th>
+    <th>Geocoded</th>
+    <th>Status</th>
+    <th>Last updated</th>
+  </tr>
+</thead>
 
           <tbody>
             {filtered.map(lead => {
@@ -385,14 +396,31 @@ export default function LeadsList({ initialLeads }: Props) {
                     {lead.sector && <p className="crm-table-sub">{lead.sector}</p>}
                   </td>
 
-                  <td>
-                    <p className="crm-table-main">{lead.contact_name || '—'}</p>
-                    {lead.contact_title && (
-                      <p className="crm-table-sub">{lead.contact_title}</p>
-                    )}
-                  </td>
-
                   <td>{lead.region || '—'}</td>
+
+<td>
+  {isLeadGeocoded(lead) ? (
+    <span
+      className="crm-badge"
+      style={{
+        background: '#e8f5e8',
+        color: '#217822',
+      }}
+    >
+      Yes
+    </span>
+  ) : (
+    <span
+      className="crm-badge"
+      style={{
+        background: '#fef2f2',
+        color: '#e53e3e',
+      }}
+    >
+      No
+    </span>
+  )}
+</td>
 
                   <td>
                     <span
