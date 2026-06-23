@@ -109,6 +109,40 @@ type LiveSendSummary = {
   remaining_pending?: number
 }
 
+type CampaignReport = {
+  totals: {
+    recipients?: number
+    pending?: number
+    sent?: number
+    delivered?: number
+    opened?: number
+    clicked?: number
+    bounced?: number
+    failed?: number
+    unsubscribed?: number
+    delivery_delayed?: number
+  }
+  rates: {
+    sent_rate?: number
+    delivery_rate?: number
+    open_rate?: number
+    click_rate?: number
+    bounce_rate?: number
+    unsubscribe_rate?: number
+    failure_rate?: number
+  }
+  status_counts: Record<string, number>
+  event_counts: Record<string, number>
+  latest_activity_at: string | null
+  recent_events: Array<{
+    id?: string
+    event_type?: string
+    created_at?: string
+    event_payload?: Record<string, any> | null
+  }>
+  recent_recipients: CampaignRecipient[]
+}
+
 const AUDIENCE_TYPES = [
   { value: 'client_contacts', label: 'Client contacts' },
   { value: 'lead_contacts', label: 'Lead contacts' },
@@ -190,7 +224,7 @@ function emptyForm(): CampaignForm {
     status: 'draft',
     sender_name: 'Educated Appointments',
     sender_email: 'noreply@send.educatedappointments.co.uk',
-reply_to: 'info@educatedappointments.co.uk',
+    reply_to: 'info@educatedappointments.co.uk',
     template_id: '',
   }
 }
@@ -236,6 +270,14 @@ function formatDate(value?: string | null) {
   } catch {
     return '—'
   }
+}
+
+function formatPercent(value?: number | null) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '0%'
+  }
+
+  return `${Number(value).toFixed(1).replace(/\.0$/, '')}%`
 }
 
 function hasFooter(body: string) {
@@ -291,6 +333,10 @@ export default function MarketingCampaignsPage() {
   const [liveSendMessage, setLiveSendMessage] = useState<string | null>(null)
   const [liveSendError, setLiveSendError] = useState<string | null>(null)
 
+  const [campaignReport, setCampaignReport] = useState<CampaignReport | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
+
   const campaignCounts = useMemo(() => {
     return campaigns.reduce<Record<string, number>>((acc, campaign) => {
       acc[campaign.status] = (acc[campaign.status] || 0) + 1
@@ -338,10 +384,13 @@ export default function MarketingCampaignsPage() {
       setRecipients([])
       setRecipientSummary({})
       setSnapshotSummary(null)
+      setCampaignReport(null)
+      setReportError(null)
       return
     }
 
     loadRecipients(form.id)
+    loadCampaignReport(form.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.id])
 
@@ -406,6 +455,32 @@ export default function MarketingCampaignsPage() {
     setRecipients(Array.isArray(json?.data) ? json.data : [])
     setRecipientSummary(json?.summary || {})
     setRecipientsLoading(false)
+  }
+
+  async function loadCampaignReport(campaignId: string) {
+    setReportLoading(true)
+    setReportError(null)
+
+    const params = new URLSearchParams()
+    params.set('campaign_id', campaignId)
+
+    const res = await fetch(
+      `/api/crm/marketing/campaign-reports?${params.toString()}`,
+      {
+        cache: 'no-store',
+      },
+    )
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setReportError(json?.error || 'Could not load campaign report.')
+      setReportLoading(false)
+      return
+    }
+
+    setCampaignReport(json?.data || null)
+    setReportLoading(false)
   }
 
   async function sendTestEmail() {
@@ -501,6 +576,7 @@ export default function MarketingCampaignsPage() {
     setLiveSendConfirm('')
 
     await loadRecipients(form.id)
+    await loadCampaignReport(form.id)
     await loadCampaigns()
 
     if (json?.summary?.remaining_pending === 0) {
@@ -528,7 +604,7 @@ export default function MarketingCampaignsPage() {
       status: campaign.status ?? 'draft',
       sender_name: campaign.sender_name ?? 'Educated Appointments',
       sender_email: 'noreply@send.educatedappointments.co.uk',
-reply_to: 'info@educatedappointments.co.uk',
+    reply_to: 'info@educatedappointments.co.uk',
       template_id: campaign.template_id ?? '',
     })
 
@@ -552,6 +628,8 @@ reply_to: 'info@educatedappointments.co.uk',
     setRecipients([])
     setRecipientSummary({})
     setSnapshotSummary(null)
+    setCampaignReport(null)
+    setReportError(null)
     setError(null)
     setSuccess(null)
     setRecipientError(null)
@@ -635,7 +713,7 @@ reply_to: 'info@educatedappointments.co.uk',
         status: json.data.status ?? 'draft',
         sender_name: json.data.sender_name ?? 'Educated Appointments',
         sender_email: 'noreply@send.educatedappointments.co.uk',
-reply_to: 'info@educatedappointments.co.uk',
+    reply_to: 'info@educatedappointments.co.uk',
         template_id: json.data.template_id ?? '',
       })
 
@@ -724,6 +802,7 @@ reply_to: 'info@educatedappointments.co.uk',
     )
 
     await loadRecipients(form.id)
+    await loadCampaignReport(form.id)
     await loadCampaigns()
 
     setForm(current => ({
@@ -766,6 +845,7 @@ reply_to: 'info@educatedappointments.co.uk',
     }
 
     await loadRecipients(form.id)
+    await loadCampaignReport(form.id)
     setRecipientSuccess(`Recipient snapshot cleared.`)
     setTimeout(() => setRecipientSuccess(null), 2500)
     setClearingRecipients(false)
@@ -1642,6 +1722,229 @@ reply_to: 'info@educatedappointments.co.uk',
           <p className="crm-page-sub" style={{ marginTop: 12 }}>
             The send route re-checks suppression, creates a unique unsubscribe link per recipient, and updates recipient statuses after each send.
           </p>
+        </div>
+      )}
+
+
+      {form.id && (
+        <div className="crm-card" style={{ marginBottom: 18 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'flex-start',
+              flexWrap: 'wrap',
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>Campaign report</h2>
+              <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
+                Track delivery, engagement and issues for the selected campaign.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="crm-btn-secondary"
+              onClick={() => loadCampaignReport(form.id)}
+              disabled={reportLoading}
+            >
+              {reportLoading ? 'Refreshing...' : 'Refresh report'}
+            </button>
+          </div>
+
+          {reportError && (
+            <p style={{ color: '#e53e3e', fontWeight: 700 }}>{reportError}</p>
+          )}
+
+          {!campaignReport && !reportLoading && !reportError && (
+            <p className="crm-page-sub">
+              No reporting data yet. Generate recipients and send a test/live batch to start building the report.
+            </p>
+          )}
+
+          {reportLoading && (
+            <p className="crm-page-sub">Loading campaign report...</p>
+          )}
+
+          {campaignReport && (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: 14,
+                  marginBottom: 16,
+                }}
+              >
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Recipients</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.recipients || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Sent</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.sent || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Delivered</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.delivered || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Opened</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.opened || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Clicked</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.clicked || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Bounced</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.bounced || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Unsubscribed</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.unsubscribed || 0}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Failed</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{campaignReport.totals.failed || 0}</h2>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: 14,
+                  marginBottom: 16,
+                }}
+              >
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Delivery rate</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{formatPercent(campaignReport.rates.delivery_rate)}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Open rate</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{formatPercent(campaignReport.rates.open_rate)}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Click rate</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{formatPercent(campaignReport.rates.click_rate)}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Bounce rate</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{formatPercent(campaignReport.rates.bounce_rate)}</h2>
+                </div>
+
+                <div className="crm-card" style={{ boxShadow: 'none' }}>
+                  <p className="crm-small-label">Unsubscribe rate</p>
+                  <h2 style={{ margin: '6px 0 0' }}>{formatPercent(campaignReport.rates.unsubscribe_rate)}</h2>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: 16,
+                }}
+              >
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Recent activity</h3>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="crm-table">
+                      <thead>
+                        <tr>
+                          <th>Event</th>
+                          <th>When</th>
+                          <th>Detail</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {campaignReport.recent_events.length === 0 && (
+                          <tr>
+                            <td colSpan={3}>No events yet.</td>
+                          </tr>
+                        )}
+
+                        {campaignReport.recent_events.slice(0, 10).map((event, index) => (
+                          <tr key={event.id || `${event.event_type}-${index}`}>
+                            <td>{statusLabel(event.event_type || 'event')}</td>
+                            <td>{formatDate(event.created_at)}</td>
+                            <td>
+                              {event.event_payload?.url ||
+                                event.event_payload?.email ||
+                                event.event_payload?.resend_email_id ||
+                                '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Recently active recipients</h3>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="crm-table">
+                      <thead>
+                        <tr>
+                          <th>Contact</th>
+                          <th>Status</th>
+                          <th>Latest</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {campaignReport.recent_recipients.length === 0 && (
+                          <tr>
+                            <td colSpan={3}>No recipient activity yet.</td>
+                          </tr>
+                        )}
+
+                        {campaignReport.recent_recipients.slice(0, 10).map(recipient => (
+                          <tr key={recipient.id}>
+                            <td>
+                              <strong>{recipient.contact_name || 'Unnamed contact'}</strong>
+                              <p className="crm-table-sub">{recipient.email || '—'}</p>
+                            </td>
+                            <td>{statusLabel(recipient.status || 'pending')}</td>
+                            <td>
+                              {formatDate(
+                                recipient.clicked_at ||
+                                  recipient.opened_at ||
+                                  recipient.delivered_at ||
+                                  recipient.sent_at ||
+                                  recipient.created_at,
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <p className="crm-page-sub" style={{ marginTop: 12 }}>
+                Open and click tracking can be helpful, but it is not perfect. Treat it as a useful signal rather than absolute proof someone read every word.
+              </p>
+            </>
+          )}
         </div>
       )}
 
