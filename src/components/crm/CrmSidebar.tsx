@@ -18,6 +18,14 @@ const nav = [
     ],
   },
   {
+    label: 'Marketing',
+    items: [
+      { href: '/crm/marketing', label: 'Campaigns', icon: '✉' },
+      { href: '/crm/marketing/audience', label: 'Audience', icon: '◎' },
+      { href: '/crm/marketing/suppression', label: 'Suppression', icon: '⊘' },
+    ],
+  },
+  {
     label: 'Recruitment',
     items: [
       { href: '/crm/vacancies', label: 'Vacancies', icon: '◫' },
