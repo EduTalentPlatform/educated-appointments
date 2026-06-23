@@ -166,6 +166,7 @@ const STATUS_OPTIONS = [
   { value: 'ready', label: 'Ready' },
   { value: 'paused', label: 'Paused' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'sent', label: 'Sent' },
 ]
 
 const SNAPSHOT_SOURCES = [
@@ -604,7 +605,7 @@ export default function MarketingCampaignsPage() {
       status: campaign.status ?? 'draft',
       sender_name: campaign.sender_name ?? 'Educated Appointments',
       sender_email: 'noreply@send.educatedappointments.co.uk',
-    reply_to: 'info@educatedappointments.co.uk',
+      reply_to: 'info@educatedappointments.co.uk',
       template_id: campaign.template_id ?? '',
     })
 
@@ -713,7 +714,7 @@ export default function MarketingCampaignsPage() {
         status: json.data.status ?? 'draft',
         sender_name: json.data.sender_name ?? 'Educated Appointments',
         sender_email: 'noreply@send.educatedappointments.co.uk',
-    reply_to: 'info@educatedappointments.co.uk',
+      reply_to: 'info@educatedappointments.co.uk',
         template_id: json.data.template_id ?? '',
       })
 
@@ -1576,6 +1577,7 @@ export default function MarketingCampaignsPage() {
   </div>
 )}
 
+
       {form.id && (
         <div className="crm-card" style={{ marginBottom: 18 }}>
           <div
@@ -1591,7 +1593,7 @@ export default function MarketingCampaignsPage() {
             <div>
               <h2 style={{ margin: 0 }}>Live send</h2>
               <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
-                Send this campaign in controlled batches after you have tested and reviewed the recipient snapshot.
+                Send this campaign in controlled batches after you have tested it and reviewed the recipient snapshot.
               </p>
             </div>
           </div>
@@ -1618,6 +1620,11 @@ export default function MarketingCampaignsPage() {
             }}
           >
             <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Campaign status</p>
+              <h2 style={{ margin: '6px 0 0' }}>{statusLabel(form.status)}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
               <p className="crm-small-label">Total recipients</p>
               <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.total || 0}</h2>
             </div>
@@ -1628,13 +1635,13 @@ export default function MarketingCampaignsPage() {
             </div>
 
             <div className="crm-card" style={{ boxShadow: 'none' }}>
-              <p className="crm-small-label">Sent</p>
-              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.sent || 0}</h2>
-            </div>
-
-            <div className="crm-card" style={{ boxShadow: 'none' }}>
-              <p className="crm-small-label">Failed</p>
-              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.failed || 0}</h2>
+              <p className="crm-small-label">Sent/tracked</p>
+              <h2 style={{ margin: '6px 0 0' }}>
+                {(recipientSummary.sent || 0) +
+                  (recipientSummary.delivered || 0) +
+                  (recipientSummary.opened || 0) +
+                  (recipientSummary.clicked || 0)}
+              </h2>
             </div>
           </div>
 
@@ -1724,7 +1731,6 @@ export default function MarketingCampaignsPage() {
           </p>
         </div>
       )}
-
 
       {form.id && (
         <div className="crm-card" style={{ marginBottom: 18 }}>
