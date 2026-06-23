@@ -97,6 +97,21 @@ export default function CrmSidebar() {
     )
   }
 
+  if (href === '/crm/marketing') {
+    return (
+      pathname === '/crm/marketing' ||
+      pathname.startsWith('/crm/marketing/campaigns')
+    )
+  }
+
+  if (href === '/crm/marketing/audience') {
+    return pathname === '/crm/marketing/audience'
+  }
+
+  if (href === '/crm/marketing/suppression') {
+    return pathname === '/crm/marketing/suppression'
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
