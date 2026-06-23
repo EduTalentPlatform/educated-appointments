@@ -271,6 +271,11 @@ export default function MarketingCampaignsPage() {
   const [recipientError, setRecipientError] = useState<string | null>(null)
   const [recipientSuccess, setRecipientSuccess] = useState<string | null>(null)
 
+  const [testEmail, setTestEmail] = useState('educatedappointments@gmail.com')
+const [sendingTest, setSendingTest] = useState(false)
+const [testSendMessage, setTestSendMessage] = useState<string | null>(null)
+const [testSendError, setTestSendError] = useState<string | null>(null)
+
   const campaignCounts = useMemo(() => {
     return campaigns.reduce<Record<string, number>>((acc, campaign) => {
       acc[campaign.status] = (acc[campaign.status] || 0) + 1
@@ -377,6 +382,44 @@ export default function MarketingCampaignsPage() {
     setRecipientSummary(json?.summary || {})
     setRecipientsLoading(false)
   }
+
+  async function sendTestEmail() {
+  if (!form.id) {
+    setTestSendError('Save the campaign before sending a test email.')
+    return
+  }
+
+  if (!testEmail.trim()) {
+    setTestSendError('Enter a test email address.')
+    return
+  }
+
+  setSendingTest(true)
+  setTestSendMessage(null)
+  setTestSendError(null)
+
+  const res = await fetch('/api/crm/marketing/campaigns/test-send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      campaign_id: form.id,
+      to: testEmail,
+    }),
+  })
+
+  const json = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    setTestSendError(json?.error || 'Could not send test email.')
+    setSendingTest(false)
+    return
+  }
+
+  setTestSendMessage(json?.message || `Test email sent to ${testEmail}.`)
+  setSendingTest(false)
+
+  setTimeout(() => setTestSendMessage(null), 3500)
+}
 
   function selectCampaign(campaign: Campaign) {
     setForm({
@@ -1295,6 +1338,72 @@ export default function MarketingCampaignsPage() {
           </p>
         </div>
       )}
+
+      {form.id && (
+  <div className="crm-card" style={{ marginBottom: 18 }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'flex-start',
+        flexWrap: 'wrap',
+        marginBottom: 14,
+      }}
+    >
+      <div>
+        <h2 style={{ margin: 0 }}>Send test email</h2>
+        <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
+          Send this campaign to yourself first to check the branding, layout, links and wording.
+        </p>
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(240px, 1fr) auto',
+        gap: 12,
+        alignItems: 'end',
+      }}
+    >
+      <label>
+        <span className="crm-small-label">Test email address</span>
+        <input
+          className="crm-input"
+          value={testEmail}
+          onChange={event => setTestEmail(event.target.value)}
+          placeholder="educatedappointments@gmail.com"
+        />
+      </label>
+
+      <button
+        type="button"
+        className="crm-btn-primary"
+        onClick={sendTestEmail}
+        disabled={sendingTest}
+      >
+        {sendingTest ? 'Sending...' : 'Send test'}
+      </button>
+    </div>
+
+    {testSendMessage && (
+      <p style={{ color: '#217822', fontWeight: 700, marginTop: 12 }}>
+        {testSendMessage}
+      </p>
+    )}
+
+    {testSendError && (
+      <p style={{ color: '#e53e3e', fontWeight: 700, marginTop: 12 }}>
+        {testSendError}
+      </p>
+    )}
+
+    <p className="crm-page-sub" style={{ marginTop: 12 }}>
+      This only sends to the test address. It does not update campaign recipient statuses or send to the full snapshot.
+    </p>
+  </div>
+)}
 
       <div className="crm-card">
         <div
