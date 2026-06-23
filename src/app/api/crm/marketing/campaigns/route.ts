@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  renderMarketingEmailHtml,
+  renderMarketingEmailPlainText,
+} from '@/lib/email/marketingEmailTemplate'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -17,6 +21,18 @@ const VALID_AUDIENCE_TYPES = new Set([
   'client_contacts',
   'lead_contacts',
   'mixed',
+])
+
+const VALID_CAMPAIGN_TYPES = new Set([
+  'candidate_availability',
+  'client_newsletter',
+  'sector_insight',
+  'hiring_advice',
+  'crm_portal_update',
+  'compliance_update',
+  'event_invite',
+  'case_study',
+  'general',
 ])
 
 const DEFAULT_MARKETING_FOOTER_TEXT = `
@@ -59,7 +75,12 @@ function safeAudienceType(value: unknown) {
     : 'client_contacts'
 }
 
-function ensureMarketingFooter(body: string) {
+function safeCampaignType(value: unknown) {
+  const campaignType = clean(value) || 'general'
+  return VALID_CAMPAIGN_TYPES.has(campaignType) ? campaignType : 'general'
+}
+
+function ensureMarketingFooter(body: unknown) {
   const cleanBody = clean(body)
 
   if (!cleanBody) return DEFAULT_MARKETING_FOOTER_TEXT
@@ -71,22 +92,39 @@ function ensureMarketingFooter(body: string) {
   return `${cleanBody}\n\n---\n\n${DEFAULT_MARKETING_FOOTER_TEXT}`
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
+function buildHtml(input: {
+  campaign_type?: string | null
+  header_label?: string | null
+  hero_title?: string | null
+  preview_text?: string | null
+  subject?: string | null
+  body_text: string
+  cta_text?: string | null
+  cta_url?: string | null
+}) {
+  return renderMarketingEmailHtml({
+    campaignType: input.campaign_type,
+    headerLabel: input.header_label,
+    heroTitle: input.hero_title,
+    previewText: input.preview_text,
+    subject: input.subject,
+    bodyText: input.body_text,
+    ctaText: input.cta_text,
+    ctaUrl: input.cta_url,
+  })
 }
 
-function textToHtml(value: string) {
-  return value
-    .split(/\n{2,}/)
-    .map(paragraph => paragraph.trim())
-    .filter(Boolean)
-    .map(paragraph => `<p>${escapeHtml(paragraph).replaceAll('\n', '<br />')}</p>`)
-    .join('\n')
+function shouldRegenerateHtml(body: Record<string, any>) {
+  return (
+    'body_text' in body ||
+    'campaign_type' in body ||
+    'header_label' in body ||
+    'hero_title' in body ||
+    'preview_text' in body ||
+    'subject' in body ||
+    'cta_text' in body ||
+    'cta_url' in body
+  )
 }
 
 export async function GET(request: NextRequest) {
@@ -125,7 +163,10 @@ export async function GET(request: NextRequest) {
             String(row.name ?? '').toLowerCase().includes(search) ||
             String(row.subject ?? '').toLowerCase().includes(search) ||
             String(row.preview_text ?? '').toLowerCase().includes(search) ||
-            String(row.audience_type ?? '').toLowerCase().includes(search)
+            String(row.audience_type ?? '').toLowerCase().includes(search) ||
+            String(row.campaign_type ?? '').toLowerCase().includes(search) ||
+            String(row.header_label ?? '').toLowerCase().includes(search) ||
+            String(row.hero_title ?? '').toLowerCase().includes(search)
           )
         })
       : rows
@@ -149,6 +190,13 @@ export async function POST(request: NextRequest) {
     const name = clean(body.name)
     const subject = clean(body.subject)
     const bodyText = ensureMarketingFooter(body.body_text)
+    const campaignType = safeCampaignType(body.campaign_type)
+
+    const previewText = nullableText(body.preview_text)
+    const headerLabel = nullableText(body.header_label)
+    const heroTitle = nullableText(body.hero_title)
+    const ctaText = nullableText(body.cta_text)
+    const ctaUrl = nullableText(body.cta_url)
 
     if (!name) {
       return NextResponse.json(
@@ -171,16 +219,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const bodyHtml = buildHtml({
+      campaign_type: campaignType,
+      header_label: headerLabel,
+      hero_title: heroTitle,
+      preview_text: previewText,
+      subject,
+      body_text: bodyText,
+      cta_text: ctaText,
+      cta_url: ctaUrl,
+    })
+
     const { data, error } = await supabase
       .from('marketing_campaigns')
       .insert({
         name,
         subject,
-        preview_text: nullableText(body.preview_text),
-        body_text: bodyText,
-        body_html: textToHtml(bodyText),
+        preview_text: previewText,
+        body_text: renderMarketingEmailPlainText(bodyText),
+        body_html: bodyHtml,
         template_id: nullableText(body.template_id),
         audience_type: safeAudienceType(body.audience_type),
+        campaign_type: campaignType,
+        header_label: headerLabel,
+        hero_title: heroTitle,
+        cta_text: ctaText,
+        cta_url: ctaUrl,
         status: safeStatus(body.status),
         sender_name: nullableText(body.sender_name),
         sender_email: nullableText(body.sender_email),
@@ -219,6 +283,23 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    const { data: existing, error: existingError } = await supabase
+      .from('marketing_campaigns')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 400 })
+    }
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Campaign not found.' },
+        { status: 404 },
+      )
+    }
+
     const updates: Record<string, any> = {}
 
     if ('name' in body) updates.name = clean(body.name)
@@ -226,6 +307,11 @@ export async function PATCH(request: NextRequest) {
     if ('preview_text' in body) updates.preview_text = nullableText(body.preview_text)
     if ('template_id' in body) updates.template_id = nullableText(body.template_id)
     if ('audience_type' in body) updates.audience_type = safeAudienceType(body.audience_type)
+    if ('campaign_type' in body) updates.campaign_type = safeCampaignType(body.campaign_type)
+    if ('header_label' in body) updates.header_label = nullableText(body.header_label)
+    if ('hero_title' in body) updates.hero_title = nullableText(body.hero_title)
+    if ('cta_text' in body) updates.cta_text = nullableText(body.cta_text)
+    if ('cta_url' in body) updates.cta_url = nullableText(body.cta_url)
     if ('status' in body) updates.status = safeStatus(body.status)
     if ('sender_name' in body) updates.sender_name = nullableText(body.sender_name)
     if ('sender_email' in body) updates.sender_email = nullableText(body.sender_email)
@@ -233,9 +319,30 @@ export async function PATCH(request: NextRequest) {
     if ('scheduled_at' in body) updates.scheduled_at = nullableText(body.scheduled_at)
 
     if ('body_text' in body) {
-      const bodyText = ensureMarketingFooter(body.body_text)
-      updates.body_text = bodyText
-      updates.body_html = textToHtml(bodyText)
+      updates.body_text = renderMarketingEmailPlainText(
+        ensureMarketingFooter(body.body_text),
+      )
+    }
+
+    if (shouldRegenerateHtml(body)) {
+      const next = {
+        ...existing,
+        ...updates,
+      }
+
+      const bodyText = ensureMarketingFooter(next.body_text)
+
+      updates.body_text = renderMarketingEmailPlainText(bodyText)
+      updates.body_html = buildHtml({
+        campaign_type: next.campaign_type,
+        header_label: next.header_label,
+        hero_title: next.hero_title,
+        preview_text: next.preview_text,
+        subject: next.subject,
+        body_text: bodyText,
+        cta_text: next.cta_text,
+        cta_url: next.cta_url,
+      })
     }
 
     const { data, error } = await supabase
