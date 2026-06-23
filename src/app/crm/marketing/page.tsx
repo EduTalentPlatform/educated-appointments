@@ -9,7 +9,13 @@ type Campaign = {
   subject: string
   preview_text: string | null
   body_text: string | null
+  body_html: string | null
   audience_type: string
+  campaign_type: string | null
+  header_label: string | null
+  hero_title: string | null
+  cta_text: string | null
+  cta_url: string | null
   status: string
   sender_name: string | null
   sender_email: string | null
@@ -37,11 +43,62 @@ type CampaignForm = {
   preview_text: string
   body_text: string
   audience_type: string
+  campaign_type: string
+  header_label: string
+  hero_title: string
+  cta_text: string
+  cta_url: string
   status: string
   sender_name: string
   sender_email: string
   reply_to: string
   template_id: string
+}
+
+type CampaignRecipient = {
+  id: string
+  campaign_id: string
+  source_type: string
+  source_contact_id: string | null
+  client_id: string | null
+  lead_id: string | null
+  company_name: string | null
+  contact_name: string | null
+  contact_title: string | null
+  role_type: string | null
+  email: string | null
+  email_normalised: string | null
+  status: string
+  created_at: string
+  sent_at: string | null
+  delivered_at: string | null
+  opened_at: string | null
+  clicked_at: string | null
+  bounced_at: string | null
+  unsubscribed_at: string | null
+}
+
+type RecipientSummary = {
+  total?: number
+  pending?: number
+  sent?: number
+  delivered?: number
+  opened?: number
+  clicked?: number
+  bounced?: number
+  unsubscribed?: number
+  failed?: number
+  [key: string]: number | undefined
+}
+
+type SnapshotSummary = {
+  campaign_id: string
+  source: string
+  total_checked: number
+  eligible_count: number
+  inserted_count: number
+  excluded_count: number
+  exclusion_counts: Record<string, number>
 }
 
 const AUDIENCE_TYPES = [
@@ -50,11 +107,39 @@ const AUDIENCE_TYPES = [
   { value: 'mixed', label: 'Clients and leads' },
 ]
 
+const CAMPAIGN_TYPES = [
+  { value: 'general', label: 'General update' },
+  { value: 'candidate_availability', label: 'Candidate availability' },
+  { value: 'client_newsletter', label: 'Client newsletter' },
+  { value: 'sector_insight', label: 'Sector insight' },
+  { value: 'hiring_advice', label: 'Hiring advice' },
+  { value: 'crm_portal_update', label: 'CRM / portal update' },
+  { value: 'compliance_update', label: 'Compliance update' },
+  { value: 'event_invite', label: 'Event invite' },
+  { value: 'case_study', label: 'Case study' },
+]
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'ready', label: 'Ready' },
   { value: 'paused', label: 'Paused' },
   { value: 'cancelled', label: 'Cancelled' },
+]
+
+const SNAPSHOT_SOURCES = [
+  { value: 'clients', label: 'Client contacts' },
+  { value: 'leads', label: 'Lead contacts' },
+  { value: 'all', label: 'Clients and leads' },
+]
+
+const ROLE_TYPE_OPTIONS = [
+  { value: '', label: 'All role types' },
+  { value: 'primary', label: 'Primary' },
+  { value: 'hiring_manager', label: 'Hiring manager' },
+  { value: 'decision_maker', label: 'Decision maker' },
+  { value: 'hr', label: 'HR' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'other', label: 'Other' },
 ]
 
 const DEFAULT_CANDIDATE_AVAILABILITY_BODY = `Hi {{client.contact_name}},
@@ -89,12 +174,23 @@ function emptyForm(): CampaignForm {
     preview_text: '',
     body_text: DEFAULT_CANDIDATE_AVAILABILITY_BODY,
     audience_type: 'client_contacts',
+    campaign_type: 'general',
+    header_label: '',
+    hero_title: '',
+    cta_text: '',
+    cta_url: '',
     status: 'draft',
     sender_name: 'Educated Appointments',
     sender_email: 'noreply@educatedappointments.co.uk',
     reply_to: '',
     template_id: '',
   }
+}
+
+function sourceFromAudienceType(audienceType: string) {
+  if (audienceType === 'lead_contacts') return 'leads'
+  if (audienceType === 'mixed') return 'all'
+  return 'clients'
 }
 
 function statusLabel(value: string) {
@@ -106,6 +202,16 @@ function statusLabel(value: string) {
 
 function audienceLabel(value: string) {
   return AUDIENCE_TYPES.find(type => type.value === value)?.label || value
+}
+
+function campaignTypeLabel(value?: string | null) {
+  return CAMPAIGN_TYPES.find(type => type.value === value)?.label || 'General update'
+}
+
+function sourceTypeLabel(value?: string | null) {
+  if (value === 'client_contact') return 'Client'
+  if (value === 'lead_contact') return 'Lead'
+  return value || '—'
 }
 
 function formatDate(value?: string | null) {
@@ -128,10 +234,27 @@ function hasFooter(body: string) {
   return body.includes('{{unsubscribe_url}}')
 }
 
+function formatExclusionReason(value: string) {
+  return value
+    .split('_')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 export default function MarketingCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [form, setForm] = useState<CampaignForm>(() => emptyForm())
+
+  const [recipients, setRecipients] = useState<CampaignRecipient[]>([])
+  const [recipientSummary, setRecipientSummary] = useState<RecipientSummary>({})
+  const [snapshotSummary, setSnapshotSummary] = useState<SnapshotSummary | null>(null)
+
+  const [snapshotSource, setSnapshotSource] = useState('clients')
+  const [snapshotRoleType, setSnapshotRoleType] = useState('')
+  const [snapshotSearch, setSnapshotSearch] = useState('')
+  const [snapshotPrimaryOnly, setSnapshotPrimaryOnly] = useState(false)
+  const [snapshotIncludeUnknownConsent, setSnapshotIncludeUnknownConsent] = useState(true)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -139,8 +262,14 @@ export default function MarketingCampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [recipientsLoading, setRecipientsLoading] = useState(false)
+  const [generatingRecipients, setGeneratingRecipients] = useState(false)
+  const [clearingRecipients, setClearingRecipients] = useState(false)
+
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [recipientError, setRecipientError] = useState<string | null>(null)
+  const [recipientSuccess, setRecipientSuccess] = useState<string | null>(null)
 
   const campaignCounts = useMemo(() => {
     return campaigns.reduce<Record<string, number>>((acc, campaign) => {
@@ -152,6 +281,14 @@ export default function MarketingCampaignsPage() {
   const activeTemplates = useMemo(() => {
     return templates.filter(template => template.is_active !== false)
   }, [templates])
+
+  const selectedCampaign = useMemo(() => {
+    return campaigns.find(campaign => campaign.id === form.id) || null
+  }, [campaigns, form.id])
+
+  const canClearRecipients = useMemo(() => {
+    return recipients.length > 0 && recipients.every(recipient => recipient.status === 'pending')
+  }, [recipients])
 
   useEffect(() => {
     loadTemplates()
@@ -165,6 +302,18 @@ export default function MarketingCampaignsPage() {
     return () => window.clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter])
+
+  useEffect(() => {
+    if (!form.id) {
+      setRecipients([])
+      setRecipientSummary({})
+      setSnapshotSummary(null)
+      return
+    }
+
+    loadRecipients(form.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.id])
 
   async function loadTemplates() {
     const res = await fetch('/api/crm/email-templates', {
@@ -202,6 +351,33 @@ export default function MarketingCampaignsPage() {
     setLoading(false)
   }
 
+  async function loadRecipients(campaignId: string) {
+    setRecipientsLoading(true)
+    setRecipientError(null)
+
+    const params = new URLSearchParams()
+    params.set('campaign_id', campaignId)
+
+    const res = await fetch(
+      `/api/crm/marketing/campaign-recipients?${params.toString()}`,
+      {
+        cache: 'no-store',
+      },
+    )
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setRecipientError(json?.error || 'Could not load campaign recipients.')
+      setRecipientsLoading(false)
+      return
+    }
+
+    setRecipients(Array.isArray(json?.data) ? json.data : [])
+    setRecipientSummary(json?.summary || {})
+    setRecipientsLoading(false)
+  }
+
   function selectCampaign(campaign: Campaign) {
     setForm({
       id: campaign.id,
@@ -210,6 +386,11 @@ export default function MarketingCampaignsPage() {
       preview_text: campaign.preview_text ?? '',
       body_text: campaign.body_text ?? '',
       audience_type: campaign.audience_type ?? 'client_contacts',
+      campaign_type: campaign.campaign_type ?? 'general',
+      header_label: campaign.header_label ?? '',
+      hero_title: campaign.hero_title ?? '',
+      cta_text: campaign.cta_text ?? '',
+      cta_url: campaign.cta_url ?? '',
       status: campaign.status ?? 'draft',
       sender_name: campaign.sender_name ?? 'Educated Appointments',
       sender_email: campaign.sender_email ?? 'noreply@educatedappointments.co.uk',
@@ -217,15 +398,30 @@ export default function MarketingCampaignsPage() {
       template_id: campaign.template_id ?? '',
     })
 
+    setSnapshotSource(sourceFromAudienceType(campaign.audience_type ?? 'client_contacts'))
+    setSnapshotSummary(null)
     setError(null)
     setSuccess(null)
+    setRecipientError(null)
+    setRecipientSuccess(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function newCampaign() {
-    setForm(emptyForm())
+    const nextForm = emptyForm()
+    setForm(nextForm)
+    setSnapshotSource(sourceFromAudienceType(nextForm.audience_type))
+    setSnapshotRoleType('')
+    setSnapshotSearch('')
+    setSnapshotPrimaryOnly(false)
+    setSnapshotIncludeUnknownConsent(true)
+    setRecipients([])
+    setRecipientSummary({})
+    setSnapshotSummary(null)
     setError(null)
     setSuccess(null)
+    setRecipientError(null)
+    setRecipientSuccess(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -297,12 +493,19 @@ export default function MarketingCampaignsPage() {
         preview_text: json.data.preview_text ?? '',
         body_text: json.data.body_text ?? '',
         audience_type: json.data.audience_type ?? 'client_contacts',
+        campaign_type: json.data.campaign_type ?? 'general',
+        header_label: json.data.header_label ?? '',
+        hero_title: json.data.hero_title ?? '',
+        cta_text: json.data.cta_text ?? '',
+        cta_url: json.data.cta_url ?? '',
         status: json.data.status ?? 'draft',
         sender_name: json.data.sender_name ?? 'Educated Appointments',
         sender_email: json.data.sender_email ?? 'noreply@educatedappointments.co.uk',
         reply_to: json.data.reply_to ?? '',
         template_id: json.data.template_id ?? '',
       })
+
+      setSnapshotSource(sourceFromAudienceType(json.data.audience_type ?? 'client_contacts'))
     }
 
     await loadCampaigns()
@@ -343,13 +546,104 @@ export default function MarketingCampaignsPage() {
     setCancellingId(null)
   }
 
+  async function generateRecipients() {
+    if (!form.id) {
+      setRecipientError('Save the campaign before generating recipients.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      'Generate a recipient snapshot for this campaign? Existing pending recipients for this campaign will be replaced.',
+    )
+
+    if (!confirmed) return
+
+    setGeneratingRecipients(true)
+    setRecipientError(null)
+    setRecipientSuccess(null)
+    setSnapshotSummary(null)
+
+    const res = await fetch('/api/crm/marketing/campaign-recipients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaign_id: form.id,
+        source: snapshotSource,
+        role_type: snapshotRoleType,
+        search: snapshotSearch,
+        primary_only: snapshotPrimaryOnly,
+        include_unknown_consent: snapshotIncludeUnknownConsent,
+      }),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setRecipientError(json?.error || 'Could not generate campaign recipients.')
+      setGeneratingRecipients(false)
+      return
+    }
+
+    setSnapshotSummary(json?.summary || null)
+    setRecipientSuccess(
+      `Recipient snapshot generated. ${json?.summary?.inserted_count || 0} recipients added.`,
+    )
+
+    await loadRecipients(form.id)
+    await loadCampaigns()
+
+    setForm(current => ({
+      ...current,
+      status: current.status === 'draft' ? 'ready' : current.status,
+    }))
+
+    setTimeout(() => setRecipientSuccess(null), 3500)
+    setGeneratingRecipients(false)
+  }
+
+  async function clearRecipients() {
+    if (!form.id) return
+
+    const confirmed = window.confirm(
+      'Clear the current pending recipient snapshot? This is only allowed before any recipients have been sent.',
+    )
+
+    if (!confirmed) return
+
+    setClearingRecipients(true)
+    setRecipientError(null)
+    setRecipientSuccess(null)
+    setSnapshotSummary(null)
+
+    const res = await fetch('/api/crm/marketing/campaign-recipients', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaign_id: form.id,
+      }),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setRecipientError(json?.error || 'Could not clear campaign recipients.')
+      setClearingRecipients(false)
+      return
+    }
+
+    await loadRecipients(form.id)
+    setRecipientSuccess(`Recipient snapshot cleared.`)
+    setTimeout(() => setRecipientSuccess(null), 2500)
+    setClearingRecipients(false)
+  }
+
   return (
     <div className="crm-page">
       <div className="crm-page-header">
         <div>
           <h1 className="crm-page-title">Campaigns</h1>
           <p className="crm-page-sub">
-            Create human, useful candidate availability campaigns before sending.
+            Create useful branded mailers, generate safe recipient snapshots, then review before sending.
           </p>
         </div>
 
@@ -387,8 +681,8 @@ export default function MarketingCampaignsPage() {
         </div>
 
         <div className="crm-card">
-          <p className="crm-small-label">Sent</p>
-          <h2 style={{ margin: '6px 0 0' }}>{campaignCounts.sent || 0}</h2>
+          <p className="crm-small-label">Selected recipients</p>
+          <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.total || 0}</h2>
         </div>
       </div>
 
@@ -408,7 +702,7 @@ export default function MarketingCampaignsPage() {
               {form.id ? 'Edit campaign draft' : 'Create campaign draft'}
             </h2>
             <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
-              No emails are sent from this screen. This only saves the draft.
+              No emails are sent from this screen. This saves the campaign and prepares it for review.
             </p>
           </div>
 
@@ -433,8 +727,28 @@ export default function MarketingCampaignsPage() {
                 onChange={event =>
                   setForm(current => ({ ...current, name: event.target.value }))
                 }
-                placeholder="Candidate availability - Electrical Tutors"
+                placeholder="June employer update"
               />
+            </label>
+
+            <label>
+              <span className="crm-small-label">Campaign type</span>
+              <select
+                className="crm-input"
+                value={form.campaign_type}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    campaign_type: event.target.value,
+                  }))
+                }
+              >
+                {CAMPAIGN_TYPES.map(type => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label>
@@ -442,12 +756,15 @@ export default function MarketingCampaignsPage() {
               <select
                 className="crm-input"
                 value={form.audience_type}
-                onChange={event =>
+                onChange={event => {
+                  const nextAudienceType = event.target.value
+
                   setForm(current => ({
                     ...current,
-                    audience_type: event.target.value,
+                    audience_type: nextAudienceType,
                   }))
-                }
+                  setSnapshotSource(sourceFromAudienceType(nextAudienceType))
+                }}
               >
                 {AUDIENCE_TYPES.map(type => (
                   <option key={type.value} value={type.value}>
@@ -473,7 +790,16 @@ export default function MarketingCampaignsPage() {
                 ))}
               </select>
             </label>
+          </div>
 
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              marginTop: 12,
+            }}
+          >
             <label>
               <span className="crm-small-label">Template</span>
               <select
@@ -488,6 +814,36 @@ export default function MarketingCampaignsPage() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label>
+              <span className="crm-small-label">Header label</span>
+              <input
+                className="crm-input"
+                value={form.header_label}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    header_label: event.target.value,
+                  }))
+                }
+                placeholder="Useful hiring update"
+              />
+            </label>
+
+            <label>
+              <span className="crm-small-label">Hero title</span>
+              <input
+                className="crm-input"
+                value={form.hero_title}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    hero_title: event.target.value,
+                  }))
+                }
+                placeholder="Optional branded email heading"
+              />
             </label>
           </div>
 
@@ -507,7 +863,7 @@ export default function MarketingCampaignsPage() {
                 onChange={event =>
                   setForm(current => ({ ...current, subject: event.target.value }))
                 }
-                placeholder="Potential candidate availability"
+                placeholder="A useful update from Educated Appointments"
               />
             </label>
 
@@ -522,7 +878,46 @@ export default function MarketingCampaignsPage() {
                     preview_text: event.target.value,
                   }))
                 }
-                placeholder="A quick candidate update that may be useful..."
+                placeholder="A quick update that may be useful..."
+              />
+            </label>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              marginTop: 12,
+            }}
+          >
+            <label>
+              <span className="crm-small-label">CTA button text</span>
+              <input
+                className="crm-input"
+                value={form.cta_text}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    cta_text: event.target.value,
+                  }))
+                }
+                placeholder="Optional, e.g. View the portal"
+              />
+            </label>
+
+            <label>
+              <span className="crm-small-label">CTA button URL</span>
+              <input
+                className="crm-input"
+                value={form.cta_url}
+                onChange={event =>
+                  setForm(current => ({
+                    ...current,
+                    cta_url: event.target.value,
+                  }))
+                }
+                placeholder="https://..."
               />
             </label>
           </div>
@@ -636,6 +1031,271 @@ export default function MarketingCampaignsPage() {
         </form>
       </div>
 
+      {form.id && (
+        <div className="crm-card" style={{ marginBottom: 18 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'flex-start',
+              flexWrap: 'wrap',
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>Recipient snapshot</h2>
+              <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
+                Freeze a safe recipient list for this campaign before sending.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="crm-btn-secondary"
+                onClick={() => loadRecipients(form.id)}
+                disabled={recipientsLoading}
+              >
+                {recipientsLoading ? 'Refreshing...' : 'Refresh recipients'}
+              </button>
+
+              <button
+                type="button"
+                className="crm-btn-primary"
+                onClick={generateRecipients}
+                disabled={generatingRecipients}
+              >
+                {generatingRecipients ? 'Generating...' : 'Generate recipients'}
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 14,
+              marginBottom: 16,
+            }}
+          >
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Recipients</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.total || 0}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Pending</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.pending || 0}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Campaign status</p>
+              <h2 style={{ margin: '6px 0 0' }}>{statusLabel(form.status)}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Campaign type</p>
+              <h2 style={{ margin: '6px 0 0' }}>{campaignTypeLabel(form.campaign_type)}</h2>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <label>
+              <span className="crm-small-label">Snapshot source</span>
+              <select
+                className="crm-input"
+                value={snapshotSource}
+                onChange={event => setSnapshotSource(event.target.value)}
+              >
+                {SNAPSHOT_SOURCES.map(source => (
+                  <option key={source.value} value={source.value}>
+                    {source.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="crm-small-label">Role type</span>
+              <select
+                className="crm-input"
+                value={snapshotRoleType}
+                onChange={event => setSnapshotRoleType(event.target.value)}
+              >
+                {ROLE_TYPE_OPTIONS.map(role => (
+                  <option key={role.value} value={role.value}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span className="crm-small-label">Search/filter</span>
+              <input
+                className="crm-input"
+                value={snapshotSearch}
+                onChange={event => setSnapshotSearch(event.target.value)}
+                placeholder="Company, contact, title, email..."
+              />
+            </label>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 16,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 14,
+            }}
+          >
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={snapshotPrimaryOnly}
+                onChange={event => setSnapshotPrimaryOnly(event.target.checked)}
+              />
+              <span>Primary contacts only</span>
+            </label>
+
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={snapshotIncludeUnknownConsent}
+                onChange={event => setSnapshotIncludeUnknownConsent(event.target.checked)}
+              />
+              <span>Include unknown marketing consent</span>
+            </label>
+
+            {canClearRecipients && (
+              <button
+                type="button"
+                className="crm-btn-secondary"
+                onClick={clearRecipients}
+                disabled={clearingRecipients}
+              >
+                {clearingRecipients ? 'Clearing...' : 'Clear pending snapshot'}
+              </button>
+            )}
+          </div>
+
+          {recipientSuccess && (
+            <p style={{ color: '#217822', fontWeight: 700 }}>{recipientSuccess}</p>
+          )}
+
+          {recipientError && (
+            <p style={{ color: '#e53e3e', fontWeight: 700 }}>{recipientError}</p>
+          )}
+
+          {snapshotSummary && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: 14,
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+              }}
+            >
+              <strong>Snapshot result:</strong>{' '}
+              {snapshotSummary.inserted_count} recipients inserted from{' '}
+              {snapshotSummary.total_checked} checked.{' '}
+              {snapshotSummary.excluded_count} excluded.
+
+              {Object.keys(snapshotSummary.exclusion_counts || {}).length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <span className="crm-small-label">Exclusions</span>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    {Object.entries(snapshotSummary.exclusion_counts).map(([reason, count]) => (
+                      <span
+                        key={reason}
+                        style={{
+                          display: 'inline-flex',
+                          gap: 6,
+                          padding: '6px 10px',
+                          borderRadius: 999,
+                          background: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          fontSize: 13,
+                        }}
+                      >
+                        <strong>{formatExclusionReason(reason)}</strong>
+                        {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="crm-table">
+              <thead>
+                <tr>
+                  <th>Contact</th>
+                  <th>Company</th>
+                  <th>Source</th>
+                  <th>Role</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Added</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recipients.length === 0 && !recipientsLoading && (
+                  <tr>
+                    <td colSpan={7}>No recipients generated yet.</td>
+                  </tr>
+                )}
+
+                {recipientsLoading && (
+                  <tr>
+                    <td colSpan={7}>Loading recipients...</td>
+                  </tr>
+                )}
+
+                {recipients.slice(0, 100).map(recipient => (
+                  <tr key={recipient.id}>
+                    <td>
+                      <strong>{recipient.contact_name || 'Unnamed contact'}</strong>
+                      {recipient.contact_title && (
+                        <p className="crm-table-sub">{recipient.contact_title}</p>
+                      )}
+                    </td>
+                    <td>{recipient.company_name || '—'}</td>
+                    <td>{sourceTypeLabel(recipient.source_type)}</td>
+                    <td>{recipient.role_type || '—'}</td>
+                    <td>{recipient.email || '—'}</td>
+                    <td>{statusLabel(recipient.status || 'pending')}</td>
+                    <td>{formatDate(recipient.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {recipients.length > 100 && (
+            <p className="crm-page-sub" style={{ marginTop: 12 }}>
+              Showing the first 100 recipients. Full sending will still use the complete snapshot.
+            </p>
+          )}
+
+          <p className="crm-page-sub" style={{ marginTop: 12 }}>
+            Sending is still disabled. This step only prepares and reviews the frozen recipient list.
+          </p>
+        </div>
+      )}
+
       <div className="crm-card">
         <div
           style={{
@@ -650,7 +1310,7 @@ export default function MarketingCampaignsPage() {
           <div>
             <h2 style={{ margin: 0 }}>Saved campaigns</h2>
             <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
-              Drafts are saved here before recipients are generated.
+              Select a campaign to edit it or generate recipients.
             </p>
           </div>
 
@@ -692,6 +1352,7 @@ export default function MarketingCampaignsPage() {
               <tr>
                 <th>Campaign</th>
                 <th>Subject</th>
+                <th>Type</th>
                 <th>Audience</th>
                 <th>Status</th>
                 <th>Created</th>
@@ -701,7 +1362,7 @@ export default function MarketingCampaignsPage() {
             <tbody>
               {campaigns.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6}>No campaigns found.</td>
+                  <td colSpan={7}>No campaigns found.</td>
                 </tr>
               )}
 
@@ -719,6 +1380,7 @@ export default function MarketingCampaignsPage() {
                       <p className="crm-table-sub">{campaign.preview_text}</p>
                     )}
                   </td>
+                  <td>{campaignTypeLabel(campaign.campaign_type)}</td>
                   <td>{audienceLabel(campaign.audience_type)}</td>
                   <td>{statusLabel(campaign.status)}</td>
                   <td>{formatDate(campaign.created_at)}</td>
@@ -757,7 +1419,7 @@ export default function MarketingCampaignsPage() {
         </div>
 
         <p className="crm-page-sub" style={{ marginTop: 12 }}>
-          Sending is deliberately not available yet. Next we will create a recipient snapshot from the audience preview.
+          Next we will add test sending, then live sending once the recipient snapshot has been reviewed.
         </p>
       </div>
     </div>
