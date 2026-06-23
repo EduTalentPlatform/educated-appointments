@@ -181,8 +181,8 @@ function emptyForm(): CampaignForm {
     cta_url: '',
     status: 'draft',
     sender_name: 'Educated Appointments',
-    sender_email: 'noreply@educatedappointments.co.uk',
-    reply_to: '',
+    sender_email: 'noreply@send.educatedappointments.co.uk',
+reply_to: 'info@educatedappointments.co.uk',
     template_id: '',
   }
 }
@@ -436,8 +436,8 @@ const [testSendError, setTestSendError] = useState<string | null>(null)
       cta_url: campaign.cta_url ?? '',
       status: campaign.status ?? 'draft',
       sender_name: campaign.sender_name ?? 'Educated Appointments',
-      sender_email: campaign.sender_email ?? 'noreply@educatedappointments.co.uk',
-      reply_to: campaign.reply_to ?? '',
+      sender_email: 'noreply@send.educatedappointments.co.uk',
+reply_to: 'info@educatedappointments.co.uk',
       template_id: campaign.template_id ?? '',
     })
 
@@ -543,8 +543,8 @@ const [testSendError, setTestSendError] = useState<string | null>(null)
         cta_url: json.data.cta_url ?? '',
         status: json.data.status ?? 'draft',
         sender_name: json.data.sender_name ?? 'Educated Appointments',
-        sender_email: json.data.sender_email ?? 'noreply@educatedappointments.co.uk',
-        reply_to: json.data.reply_to ?? '',
+        sender_email: 'noreply@send.educatedappointments.co.uk',
+reply_to: 'info@educatedappointments.co.uk',
         template_id: json.data.template_id ?? '',
       })
 

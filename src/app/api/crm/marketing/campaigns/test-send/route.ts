@@ -36,7 +36,7 @@ function siteUrlFromRequest(request: NextRequest) {
 }
 
 function formatFrom(senderName?: string | null, senderEmail?: string | null) {
-  const email = clean(senderEmail) || 'noreply@educatedappointments.co.uk'
+  const email = clean(senderEmail) || 'noreply@send.educatedappointments.co.uk'
   const name = clean(senderName) || 'Educated Appointments'
 
   return `${name} <${email}>`
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
       replyTo:
         clean(campaign.reply_to) ||
         clean(campaign.sender_email) ||
-        'noreply@educatedappointments.co.uk',
+        'noreply@send.educatedappointments.co.uk',
     })
 
     await supabase.from('marketing_events').insert({

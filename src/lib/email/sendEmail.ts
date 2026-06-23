@@ -8,7 +8,7 @@ type SendEmailInput = {
 }
 
 const DEFAULT_FROM_EMAIL =
-  'Educated Appointments <noreply@educatedappointments.co.uk>'
+  'Educated Appointments <noreply@send.educatedappointments.co.uk>'
 
 function cleanEmailHeader(value?: string | null) {
   return String(value || '')
