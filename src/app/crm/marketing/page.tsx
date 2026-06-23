@@ -101,6 +101,14 @@ type SnapshotSummary = {
   exclusion_counts: Record<string, number>
 }
 
+type LiveSendSummary = {
+  attempted?: number
+  sent?: number
+  failed?: number
+  skipped?: number
+  remaining_pending?: number
+}
+
 const AUDIENCE_TYPES = [
   { value: 'client_contacts', label: 'Client contacts' },
   { value: 'lead_contacts', label: 'Lead contacts' },
@@ -272,9 +280,16 @@ export default function MarketingCampaignsPage() {
   const [recipientSuccess, setRecipientSuccess] = useState<string | null>(null)
 
   const [testEmail, setTestEmail] = useState('educatedappointments@gmail.com')
-const [sendingTest, setSendingTest] = useState(false)
-const [testSendMessage, setTestSendMessage] = useState<string | null>(null)
-const [testSendError, setTestSendError] = useState<string | null>(null)
+  const [sendingTest, setSendingTest] = useState(false)
+  const [testSendMessage, setTestSendMessage] = useState<string | null>(null)
+  const [testSendError, setTestSendError] = useState<string | null>(null)
+
+  const [liveSendLimit, setLiveSendLimit] = useState('25')
+  const [liveSendConfirm, setLiveSendConfirm] = useState('')
+  const [sendingLiveBatch, setSendingLiveBatch] = useState(false)
+  const [liveSendSummary, setLiveSendSummary] = useState<LiveSendSummary | null>(null)
+  const [liveSendMessage, setLiveSendMessage] = useState<string | null>(null)
+  const [liveSendError, setLiveSendError] = useState<string | null>(null)
 
   const campaignCounts = useMemo(() => {
     return campaigns.reduce<Record<string, number>>((acc, campaign) => {
@@ -294,6 +309,16 @@ const [testSendError, setTestSendError] = useState<string | null>(null)
   const canClearRecipients = useMemo(() => {
     return recipients.length > 0 && recipients.every(recipient => recipient.status === 'pending')
   }, [recipients])
+
+  const canSendLiveBatch = useMemo(() => {
+    return (
+      Boolean(form.id) &&
+      form.status === 'ready' &&
+      (recipientSummary.pending || 0) > 0 &&
+      liveSendConfirm.trim() === 'SEND_CAMPAIGN' &&
+      !sendingLiveBatch
+    )
+  }, [form.id, form.status, liveSendConfirm, recipientSummary.pending, sendingLiveBatch])
 
   useEffect(() => {
     loadTemplates()
@@ -384,42 +409,108 @@ const [testSendError, setTestSendError] = useState<string | null>(null)
   }
 
   async function sendTestEmail() {
-  if (!form.id) {
-    setTestSendError('Save the campaign before sending a test email.')
-    return
-  }
+    if (!form.id) {
+      setTestSendError('Save the campaign before sending a test email.')
+      return
+    }
 
-  if (!testEmail.trim()) {
-    setTestSendError('Enter a test email address.')
-    return
-  }
+    if (!testEmail.trim()) {
+      setTestSendError('Enter a test email address.')
+      return
+    }
 
-  setSendingTest(true)
-  setTestSendMessage(null)
-  setTestSendError(null)
+    setSendingTest(true)
+    setTestSendMessage(null)
+    setTestSendError(null)
 
-  const res = await fetch('/api/crm/marketing/campaigns/test-send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      campaign_id: form.id,
-      to: testEmail,
-    }),
-  })
+    const res = await fetch('/api/crm/marketing/campaigns/test-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaign_id: form.id,
+        to: testEmail,
+      }),
+    })
 
-  const json = await res.json().catch(() => null)
+    const json = await res.json().catch(() => null)
 
-  if (!res.ok) {
-    setTestSendError(json?.error || 'Could not send test email.')
+    if (!res.ok) {
+      setTestSendError(json?.error || 'Could not send test email.')
+      setSendingTest(false)
+      return
+    }
+
+    setTestSendMessage(json?.message || `Test email sent to ${testEmail}.`)
     setSendingTest(false)
-    return
+
+    setTimeout(() => setTestSendMessage(null), 3500)
   }
 
-  setTestSendMessage(json?.message || `Test email sent to ${testEmail}.`)
-  setSendingTest(false)
+  async function sendLiveBatch() {
+    if (!form.id) {
+      setLiveSendError('Save the campaign before sending.')
+      return
+    }
 
-  setTimeout(() => setTestSendMessage(null), 3500)
-}
+    if (form.status !== 'ready') {
+      setLiveSendError('Campaign must be ready before live sending. Generate and review recipients first.')
+      return
+    }
+
+    if ((recipientSummary.pending || 0) <= 0) {
+      setLiveSendError('There are no pending recipients to send.')
+      return
+    }
+
+    if (liveSendConfirm.trim() !== 'SEND_CAMPAIGN') {
+      setLiveSendError('Type SEND_CAMPAIGN to confirm this live send batch.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Send this campaign to the next ${liveSendLimit} pending recipients? This is a live email send.`,
+    )
+
+    if (!confirmed) return
+
+    setSendingLiveBatch(true)
+    setLiveSendMessage(null)
+    setLiveSendError(null)
+    setLiveSendSummary(null)
+
+    const res = await fetch('/api/crm/marketing/campaigns/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        campaign_id: form.id,
+        confirm_send: 'SEND_CAMPAIGN',
+        limit: Number(liveSendLimit) || 25,
+      }),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setLiveSendError(json?.error || 'Could not send live campaign batch.')
+      setSendingLiveBatch(false)
+      return
+    }
+
+    setLiveSendSummary(json?.summary || null)
+    setLiveSendMessage(json?.message || 'Live campaign batch processed.')
+    setLiveSendConfirm('')
+
+    await loadRecipients(form.id)
+    await loadCampaigns()
+
+    if (json?.summary?.remaining_pending === 0) {
+      setForm(current => ({ ...current, status: 'sent' }))
+    } else {
+      setForm(current => ({ ...current, status: 'ready' }))
+    }
+
+    setSendingLiveBatch(false)
+  }
 
   function selectCampaign(campaign: Campaign) {
     setForm({
@@ -1334,7 +1425,7 @@ reply_to: 'info@educatedappointments.co.uk',
           )}
 
           <p className="crm-page-sub" style={{ marginTop: 12 }}>
-            Sending is still disabled. This step only prepares and reviews the frozen recipient list.
+            Review this list carefully before using the live send panel below.
           </p>
         </div>
       )}
@@ -1404,6 +1495,155 @@ reply_to: 'info@educatedappointments.co.uk',
     </p>
   </div>
 )}
+
+      {form.id && (
+        <div className="crm-card" style={{ marginBottom: 18 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+              alignItems: 'flex-start',
+              flexWrap: 'wrap',
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0 }}>Live send</h2>
+              <p className="crm-page-sub" style={{ margin: '4px 0 0' }}>
+                Send this campaign in controlled batches after you have tested and reviewed the recipient snapshot.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: '#fff7ed',
+              border: '1px solid #fed7aa',
+              marginBottom: 14,
+            }}
+          >
+            <strong>Live send warning:</strong>{' '}
+            This will send real emails to pending recipients in the snapshot. Test the campaign first and check the recipient list before continuing.
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 14,
+              marginBottom: 16,
+            }}
+          >
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Total recipients</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.total || 0}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Pending</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.pending || 0}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Sent</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.sent || 0}</h2>
+            </div>
+
+            <div className="crm-card" style={{ boxShadow: 'none' }}>
+              <p className="crm-small-label">Failed</p>
+              <h2 style={{ margin: '6px 0 0' }}>{recipientSummary.failed || 0}</h2>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              alignItems: 'end',
+            }}
+          >
+            <label>
+              <span className="crm-small-label">Batch size</span>
+              <select
+                className="crm-input"
+                value={liveSendLimit}
+                onChange={event => setLiveSendLimit(event.target.value)}
+              >
+                <option value="10">10 recipients</option>
+                <option value="25">25 recipients</option>
+                <option value="50">50 recipients</option>
+                <option value="100">100 recipients</option>
+              </select>
+            </label>
+
+            <label>
+              <span className="crm-small-label">Type SEND_CAMPAIGN to confirm</span>
+              <input
+                className="crm-input"
+                value={liveSendConfirm}
+                onChange={event => setLiveSendConfirm(event.target.value)}
+                placeholder="SEND_CAMPAIGN"
+              />
+            </label>
+
+            <button
+              type="button"
+              className="crm-btn-primary"
+              onClick={sendLiveBatch}
+              disabled={!canSendLiveBatch}
+            >
+              {sendingLiveBatch ? 'Sending batch...' : 'Send live batch'}
+            </button>
+          </div>
+
+          {form.status !== 'ready' && (
+            <p className="crm-page-sub" style={{ marginTop: 12 }}>
+              Campaign status must be Ready before live sending. Generate recipients first, then review the list.
+            </p>
+          )}
+
+          {(recipientSummary.pending || 0) <= 0 && form.status === 'ready' && (
+            <p className="crm-page-sub" style={{ marginTop: 12 }}>
+              There are no pending recipients left to send.
+            </p>
+          )}
+
+          {liveSendMessage && (
+            <p style={{ color: '#217822', fontWeight: 700, marginTop: 12 }}>
+              {liveSendMessage}
+            </p>
+          )}
+
+          {liveSendError && (
+            <p style={{ color: '#e53e3e', fontWeight: 700, marginTop: 12 }}>
+              {liveSendError}
+            </p>
+          )}
+
+          {liveSendSummary && (
+            <div
+              style={{
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 14,
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb',
+              }}
+            >
+              <strong>Batch result:</strong>{' '}
+              Attempted {liveSendSummary.attempted || 0}. Sent {liveSendSummary.sent || 0}. Failed {liveSendSummary.failed || 0}. Skipped {liveSendSummary.skipped || 0}. Remaining pending {liveSendSummary.remaining_pending || 0}.
+            </div>
+          )}
+
+          <p className="crm-page-sub" style={{ marginTop: 12 }}>
+            The send route re-checks suppression, creates a unique unsubscribe link per recipient, and updates recipient statuses after each send.
+          </p>
+        </div>
+      )}
 
       <div className="crm-card">
         <div
@@ -1528,7 +1768,7 @@ reply_to: 'info@educatedappointments.co.uk',
         </div>
 
         <p className="crm-page-sub" style={{ marginTop: 12 }}>
-          Next we will add test sending, then live sending once the recipient snapshot has been reviewed.
+          Select a campaign above to test, generate recipients and send controlled live batches.
         </p>
       </div>
     </div>
