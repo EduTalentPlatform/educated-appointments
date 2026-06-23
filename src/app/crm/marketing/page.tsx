@@ -69,15 +69,17 @@ They are actively looking and could be a strong fit if you have anything suitabl
 
 Would you like me to send over more details?`
 
-const DEFAULT_MARKETING_FOOTER_TEXT = `You can unsubscribe from these emails at any time here: {{unsubscribe_url}}
+const DEFAULT_MARKETING_FOOTER_TEXT = `
+You can unsubscribe from these emails at any time here: {{unsubscribe_url}}
 
 But before you go…
 
-These emails are designed to give you early visibility of candidates who may be a strong fit for your organisation. That could be an experienced Tutor, Assessor, Skills Coach, Manager or Business Development professional who is actively looking and ready to talk.
+We use these emails to share genuinely useful updates from Educated Appointments. That may include candidate availability, recruitment insight, sector updates, employer portal improvements, compliance support, or practical advice that could save you time.
 
-In other words, the next email could save you a job advert, a headache, and several hours of CV archaeology.
+Sometimes it might be the perfect candidate for a role you’re struggling to fill. Other times it might simply be something that makes recruitment, safer hiring or document chasing a little less painful.
 
-We’ll only send relevant candidate availability and useful updates. No waffle. No spam. No “just checking in for the 47th time this week.”`
+No waffle. No spam. No “just checking in for the 47th time this week.”
+`.trim()
 
 function emptyForm(): CampaignForm {
   return {
