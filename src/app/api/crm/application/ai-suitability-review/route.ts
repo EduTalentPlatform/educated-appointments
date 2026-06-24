@@ -153,26 +153,104 @@ async function extractPdfWithAnthropicFromBuffer(buffer: Buffer) {
   )
 }
 
-async function extractTextFromStoredFile(fileUrl?: string | null, name?: string | null) {
-  if (!fileUrl) return ''
+async function extractDocxTextFromBuffer(buffer: Buffer) {
+  const mammothModule: any = await import('mammoth')
+  const mammoth = mammothModule.default || mammothModule
 
-  const extension = getExtensionFromUrlOrName(fileUrl, name)
+  const result = await mammoth.extractRawText({ buffer })
+  return cleanText(result.value || '')
+}
 
-  if (!['pdf', 'txt', 'md'].includes(extension)) {
-    return ''
+function getDocumentExtension(doc: any) {
+  const raw = String(
+    doc?.name || doc?.storage_path || doc?.file_url || '',
+  )
+    .split('?')[0]
+    .toLowerCase()
+
+  const match = raw.match(/\.([a-z0-9]+)$/)
+  return match?.[1] || ''
+}
+
+async function getStoredDocumentBuffer({
+  supabase,
+  doc,
+}: {
+  supabase: ReturnType<typeof getServiceClient>
+  doc: any
+}) {
+  const storageBucket = cleanText(doc?.storage_bucket)
+  const storagePath = cleanText(doc?.storage_path)
+
+  if (storageBucket && storagePath) {
+    const { data, error } = await supabase.storage
+      .from(storageBucket)
+      .download(storagePath)
+
+    if (error) {
+      console.error('Could not download document from Supabase storage:', {
+        document_id: doc?.id,
+        document_name: doc?.name,
+        storage_bucket: storageBucket,
+        storage_path: storagePath,
+        error: error.message,
+      })
+    } else if (data) {
+      return Buffer.from(await data.arrayBuffer())
+    }
   }
 
-  const res = await fetch(fileUrl)
+  const fileUrl = cleanText(doc?.file_url)
 
-  if (!res.ok) {
-    throw new Error(`Could not fetch stored document: ${res.status}`)
+  if (fileUrl) {
+    const res = await fetch(fileUrl)
+
+    if (!res.ok) {
+      console.error('Could not fetch document from file_url:', {
+        document_id: doc?.id,
+        document_name: doc?.name,
+        file_url: fileUrl,
+        status: res.status,
+      })
+      return null
+    }
+
+    return Buffer.from(await res.arrayBuffer())
   }
 
-  const arrayBuffer = await res.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
+  return null
+}
+
+async function extractTextFromStoredFile({
+  supabase,
+  doc,
+}: {
+  supabase: ReturnType<typeof getServiceClient>
+  doc: any
+}) {
+  const buffer = await getStoredDocumentBuffer({ supabase, doc })
+
+  if (!buffer) return ''
+
+  const extension = getDocumentExtension(doc)
 
   if (extension === 'txt' || extension === 'md') {
     return cleanText(buffer.toString('utf8'))
+  }
+
+  if (extension === 'docx') {
+    return extractDocxTextFromBuffer(buffer)
+  }
+
+  if (extension === 'doc') {
+    console.warn(
+      'Old .doc files are not currently supported for AI suitability extraction. Please upload as .docx, PDF or TXT.',
+      {
+        document_id: doc?.id,
+        document_name: doc?.name,
+      },
+    )
+    return ''
   }
 
   return extractPdfWithAnthropicFromBuffer(buffer)
@@ -193,7 +271,10 @@ async function ensureExtractedText({
     return cleanText(doc.extracted_text)
   }
 
-  const extractedText = await extractTextFromStoredFile(doc.file_url, doc.name)
+  const extractedText = await extractTextFromStoredFile({
+  supabase,
+  doc,
+})
 
   if (!extractedText) return ''
 
@@ -480,8 +561,13 @@ export async function POST(request: NextRequest) {
       ])
 
     const cvDoc =
-      candidateDocuments?.find((doc: any) => doc.doc_type === 'cv') ??
-      candidateDocuments?.[0]
+  candidateDocuments?.find((doc: any) =>
+    ['cv', 'formatted_cv', 'candidate_cv'].includes(doc.doc_type),
+  ) ??
+  candidateDocuments?.find((doc: any) =>
+    /\.(pdf|docx|txt)$/i.test(doc.name || doc.storage_path || doc.file_url || ''),
+  ) ??
+  candidateDocuments?.[0]
 
     const jdDoc =
       vacancyDocuments?.find((doc: any) => doc.doc_type === 'job_description') ??
