@@ -87,6 +87,122 @@ function normaliseReview(raw: ReviewJson) {
   }
 }
 
+async function callAnthropicReviewJson(prompt: string) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514'
+
+  if (!apiKey) {
+    throw new Error('Missing ANTHROPIC_API_KEY in environment variables.')
+  }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: 0,
+      tools: [
+        {
+          name: 'return_suitability_review',
+          description:
+            'Return the structured recruitment suitability review for this candidate against this vacancy.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              overall_fit: {
+                type: 'string',
+                enum: ['Strong fit', 'Possible fit', 'Weak fit', 'Unclear'],
+              },
+              score: {
+                type: 'number',
+              },
+              summary: {
+                type: 'string',
+              },
+              strengths: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              missing_or_unclear: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              risks: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              candidate_questions: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              client_questions: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              recommended_next_action: {
+                type: 'string',
+                enum: [
+                  'Progress',
+                  'Hold for screening',
+                  'Reject',
+                  'Needs more information',
+                ],
+              },
+            },
+            required: [
+              'overall_fit',
+              'score',
+              'summary',
+              'strengths',
+              'missing_or_unclear',
+              'risks',
+              'candidate_questions',
+              'client_questions',
+              'recommended_next_action',
+            ],
+          },
+        },
+      ],
+      tool_choice: {
+        type: 'tool',
+        name: 'return_suitability_review',
+      },
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    }),
+  })
+
+  const json = await res.json()
+
+  if (!res.ok) {
+    throw new Error(
+      json?.error?.message || `Anthropic review failed with ${res.status}`,
+    )
+  }
+
+  const toolUse = json?.content?.find(
+    (part: any) =>
+      part?.type === 'tool_use' &&
+      part?.name === 'return_suitability_review',
+  )
+
+  if (!toolUse?.input) {
+    console.error('No tool_use review response found:', json)
+    throw new Error('No structured AI suitability review returned.')
+  }
+
+  return toolUse.input as ReviewJson
+}
+
 function getExtensionFromUrlOrName(fileUrl?: string | null, name?: string | null) {
   const source = fileUrl || name || ''
   const clean = source.split('?')[0].toLowerCase()
@@ -764,12 +880,7 @@ Return valid JSON only:
 ${reviewInput}
 `.trim()
 
-        const reviewRaw = await callAIJson<ReviewJson>(reviewPrompt, {
-      maxTokens: MAX_OUTPUT_TOKENS,
-      temperature: 0,
-      system:
-        'Return one valid JSON object only. Do not include markdown, code fences, explanations, comments or surrounding text.',
-    })
+    const reviewRaw = await callAnthropicReviewJson(reviewPrompt)
 
     const review = normaliseReview(reviewRaw)
 
