@@ -162,42 +162,64 @@ async function extractDocxTextFromBuffer(buffer: Buffer) {
 }
 
 function getDocumentExtension(doc: any) {
-  const raw = String(
-    doc?.name || doc?.storage_path || doc?.file_url || '',
-  )
-    .split('?')[0]
-    .toLowerCase()
+  const candidates = [doc?.name, doc?.storage_path, doc?.file_url]
 
-  const match = raw.match(/\.([a-z0-9]+)$/)
-  return match?.[1] || ''
+  for (const candidate of candidates) {
+    const raw = String(candidate || '')
+      .split('?')[0]
+      .toLowerCase()
+      .trim()
+
+    const match = raw.match(/\.([a-z0-9]+)$/)
+
+    if (match?.[1]) {
+      return match[1]
+    }
+  }
+
+  return ''
 }
 
 async function getStoredDocumentBuffer({
   supabase,
+  table,
   doc,
 }: {
   supabase: ReturnType<typeof getServiceClient>
+  table: 'candidate_documents' | 'vacancy_documents'
   doc: any
 }) {
-  const storageBucket = cleanText(doc?.storage_bucket)
   const storagePath = cleanText(doc?.storage_path)
 
-  if (storageBucket && storagePath) {
-    const { data, error } = await supabase.storage
-      .from(storageBucket)
-      .download(storagePath)
+  if (storagePath) {
+    const preferredBuckets =
+      table === 'candidate_documents'
+        ? ['candidate-documents', 'cvs']
+        : ['vacancy-documents']
 
-    if (error) {
-      console.error('Could not download document from Supabase storage:', {
-        document_id: doc?.id,
-        document_name: doc?.name,
-        storage_bucket: storageBucket,
-        storage_path: storagePath,
-        error: error.message,
-      })
-    } else if (data) {
-      return Buffer.from(await data.arrayBuffer())
+    const buckets = Array.from(
+      new Set(
+        [cleanText(doc?.storage_bucket), ...preferredBuckets].filter(Boolean),
+      ),
+    )
+
+    for (const bucket of buckets) {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .download(storagePath)
+
+      if (!error && data) {
+        return Buffer.from(await data.arrayBuffer())
+      }
     }
+
+    console.error('Could not download document from Supabase storage:', {
+      document_id: doc?.id,
+      document_name: doc?.name,
+      storage_bucket: doc?.storage_bucket,
+      storage_path: storagePath,
+      tried_buckets: buckets,
+    })
   }
 
   const fileUrl = cleanText(doc?.file_url)
@@ -223,12 +245,18 @@ async function getStoredDocumentBuffer({
 
 async function extractTextFromStoredFile({
   supabase,
+  table,
   doc,
 }: {
   supabase: ReturnType<typeof getServiceClient>
+  table: 'candidate_documents' | 'vacancy_documents'
   doc: any
 }) {
-  const buffer = await getStoredDocumentBuffer({ supabase, doc })
+  const buffer = await getStoredDocumentBuffer({
+    supabase,
+    table,
+    doc,
+  })
 
   if (!buffer) return ''
 
@@ -273,6 +301,7 @@ async function ensureExtractedText({
 
   const extractedText = await extractTextFromStoredFile({
   supabase,
+  table,
   doc,
 })
 
@@ -324,13 +353,15 @@ async function ensureDocumentSummary({
   sourceKind: 'candidate_cv' | 'job_description'
   fallbackText: string
 }) {
-  if (doc?.ai_summary) {
-    return cleanText(doc.ai_summary)
-  }
+    const existingExtractedText = cleanText(doc?.extracted_text)
 
   const extractedText = doc?.id
     ? await ensureExtractedText({ supabase, table, doc })
     : ''
+
+  if (doc?.ai_summary && existingExtractedText) {
+    return cleanText(doc.ai_summary)
+  }
 
   const sourceText = limitText(
     [extractedText, fallbackText].filter(Boolean).join('\n\n'),
@@ -565,7 +596,7 @@ export async function POST(request: NextRequest) {
     ['cv', 'formatted_cv', 'candidate_cv'].includes(doc.doc_type),
   ) ??
   candidateDocuments?.find((doc: any) =>
-    /\.(pdf|docx|txt)$/i.test(doc.name || doc.storage_path || doc.file_url || ''),
+    ['pdf', 'docx', 'txt', 'md'].includes(getDocumentExtension(doc)),
   ) ??
   candidateDocuments?.[0]
 
