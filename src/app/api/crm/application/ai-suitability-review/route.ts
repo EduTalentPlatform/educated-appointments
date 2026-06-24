@@ -413,14 +413,36 @@ JOB DESCRIPTION:
 ${sourceText}
 `.trim()
 
-  const summaryJson = await callAIJson<SummaryJson>(prompt, {
-    maxTokens: 1800,
-    temperature: 0.1,
-    system:
-      'You return valid JSON only. Be detailed, practical and recruitment-focused. Do not include markdown or code fences.',
-  })
+    let summaryText = ''
 
-  const summaryText = formatSummaryJson(summaryJson)
+  try {
+    const summaryJson = await callAIJson<SummaryJson>(prompt, {
+      maxTokens: 1800,
+      temperature: 0,
+      system:
+        'Return one valid JSON object only. Do not include markdown, code fences, explanations, comments or surrounding text.',
+    })
+
+    summaryText = formatSummaryJson(summaryJson)
+  } catch (error: any) {
+    console.error('AI document summary JSON error:', {
+      document_id: doc?.id,
+      document_name: doc?.name,
+      table,
+      source_kind: sourceKind,
+      error: error?.message || error,
+    })
+
+    summaryText = limitText(
+      [
+        sourceKind === 'candidate_cv'
+          ? 'Candidate CV extracted text was used directly because the AI summary could not be parsed as JSON.'
+          : 'Vacancy document extracted text was used directly because the AI summary could not be parsed as JSON.',
+        sourceText,
+      ].join('\n\n'),
+      MAX_REVIEW_EXTRA_CHARS,
+    )
+  }
 
   if (doc?.id && summaryText) {
     await supabase
@@ -742,11 +764,11 @@ Return valid JSON only:
 ${reviewInput}
 `.trim()
 
-    const reviewRaw = await callAIJson<ReviewJson>(reviewPrompt, {
+        const reviewRaw = await callAIJson<ReviewJson>(reviewPrompt, {
       maxTokens: MAX_OUTPUT_TOKENS,
-      temperature: 0.1,
+      temperature: 0,
       system:
-        'You return valid JSON only. You are practical, specific and recruitment-focused. Do not include markdown or code fences.',
+        'Return one valid JSON object only. Do not include markdown, code fences, explanations, comments or surrounding text.',
     })
 
     const review = normaliseReview(reviewRaw)
