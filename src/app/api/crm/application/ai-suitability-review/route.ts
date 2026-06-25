@@ -637,23 +637,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = getServiceClient()
 
-    if (!force && !deep) {
-      const { data: existingReview } = await supabase
-        .from('application_ai_reviews')
-        .select('*')
-        .eq('application_id', applicationId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (existingReview) {
-        return NextResponse.json({
-          data: existingReview,
-          cached: true,
-        })
-      }
-    }
-
     const { data: application, error: appError } = await supabase
       .from('applications')
       .select(`
@@ -712,6 +695,24 @@ export async function POST(request: NextRequest) {
         { error: 'Application is missing candidate or vacancy details.' },
         { status: 400 },
       )
+    }
+
+    if (!force && !deep) {
+      const { data: existingReview } = await supabase
+        .from('application_ai_reviews')
+        .select('*')
+        .eq('application_id', applicationId)
+        .eq('vacancy_id', vacancy.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existingReview) {
+        return NextResponse.json({
+          data: existingReview,
+          cached: true,
+        })
+      }
     }
 
     const [{ data: candidateDocuments }, { data: vacancyDocuments }] =

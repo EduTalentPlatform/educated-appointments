@@ -118,6 +118,7 @@ export default async function CrmApplicationPage({ params }: Props) {
   { data: applicationInterviews },
   { data: clientContacts },
   { data: standards },
+  { data: allVacancies },
 ] = await Promise.all([
     candidateId
       ? supabase
@@ -143,13 +144,16 @@ export default async function CrmApplicationPage({ params }: Props) {
           .order('created_at', { ascending: false })
       : Promise.resolve({ data: [] }),
 
-    supabase
-      .from('application_ai_reviews')
-      .select('*')
-      .eq('application_id', id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    vacancyId
+      ? supabase
+          .from('application_ai_reviews')
+          .select('*')
+          .eq('application_id', id)
+          .eq('vacancy_id', vacancyId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
 
     supabase
       .from('application_interviews')
@@ -180,19 +184,37 @@ supabase
     programme_type,
     is_active
   `)
-  .order('standard_name', { ascending: true })
+  .order('standard_name', { ascending: true }),
+
+  supabase
+  .from('vacancies')
+  .select(`
+    id,
+    title,
+    status,
+    location,
+    region,
+    salary_display,
+    clients (
+      id,
+      company_name
+    )
+  `)
+  .in('status', ['live', 'draft'])
+  .order('created_at', { ascending: false }),
 ])
 
   return (
   <ApplicationDetail
-    application={application}
-    documents={documents ?? []}
-    vacancyDocuments={vacancyDocuments ?? []}
-    activities={activities ?? []}
-    aiReview={latestAiReview ?? null}
-    applicationInterviews={applicationInterviews ?? []}
-    clientContacts={clientContacts ?? []}
-    standards={standards ?? []}
-  />
+  application={application}
+  documents={documents ?? []}
+  vacancyDocuments={vacancyDocuments ?? []}
+  activities={activities ?? []}
+  aiReview={latestAiReview ?? null}
+  applicationInterviews={applicationInterviews ?? []}
+  clientContacts={clientContacts ?? []}
+  standards={standards ?? []}
+  allVacancies={allVacancies ?? []}
+/>
 )
 }

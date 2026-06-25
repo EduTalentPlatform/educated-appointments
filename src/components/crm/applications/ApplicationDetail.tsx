@@ -13,8 +13,15 @@ import { useCrmRoleSettings } from '@/hooks/useCrmRoleSettings'
 
 type Application = {
   id: string
+  candidate_id?: string | null
+  vacancy_id: string | null
+  original_vacancy_id?: string | null
+  role_switched_at?: string | null
+  role_switch_reason?: string | null
+
   status: string
   created_at: string
+  updated_at?: string | null
 
   ea_interview_date: string | null
   ea_interview_notes: string | null
@@ -39,6 +46,22 @@ type Application = {
 
   candidates?: any
   vacancies?: any
+}
+
+type SwitchRoleVacancy = {
+  id: string
+  title: string
+  status?: string | null
+  location?: string | null
+  region?: string | null
+  salary_display?: string | null
+  clients?: {
+    id: string
+    company_name: string
+  } | {
+    id: string
+    company_name: string
+  }[] | null
 }
 
 type CandidateDocument = {
@@ -474,6 +497,7 @@ type PlacementSummary = {
   fee_percentage?: number | string | null
   final_documents_released?: boolean | null
   placed_at?: string | null
+  allVacancies?: SwitchRoleVacancy[]
 }
 
 interface Props {
@@ -486,6 +510,7 @@ interface Props {
   clientContacts?: ClientContact[]
   placement?: PlacementSummary | null
   standards?: ApprenticeshipStandard[]
+  allVacancies?: SwitchRoleVacancy[]
 }
 
 const ALL_STAGES = [
@@ -604,7 +629,6 @@ async function openSecureDocument(
 }
 
 export default function ApplicationDetail({
-
   application: initial,
   documents: initialDocuments,
   vacancyDocuments = [],
@@ -614,6 +638,7 @@ export default function ApplicationDetail({
   clientContacts = [],
   placement: initialPlacement = null,
   standards = [],
+  allVacancies = [],
 }: Props) {
 
   const [app, setApp] = useState(initial)
@@ -636,6 +661,12 @@ const [generatingActivityMessage, setGeneratingActivityMessage] = useState(false
 const [activityAiContext, setActivityAiContext] = useState('')
 const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null)
 const [selectedActivityTemplateId, setSelectedActivityTemplateId] = useState('')
+
+const [switchRoleOpen, setSwitchRoleOpen] = useState(false)
+const [switchRoleVacancyId, setSwitchRoleVacancyId] = useState('')
+const [switchRoleReason, setSwitchRoleReason] = useState('')
+const [switchingRole, setSwitchingRole] = useState(false)
+const [switchRoleError, setSwitchRoleError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<
     | 'overview'
@@ -874,6 +905,52 @@ async function uploadCandidateDocumentFromApplication(event: React.FormEvent) {
     )
   } finally {
     setPreviewingRolePortalEmail(false)
+  }
+}
+
+async function switchApplicationRole() {
+  if (!switchRoleVacancyId) {
+    setSwitchRoleError('Please choose the new role.')
+    return
+  }
+
+  if (switchRoleVacancyId === app.vacancy_id || switchRoleVacancyId === v?.id) {
+    setSwitchRoleError('This application is already linked to that role.')
+    return
+  }
+
+  setSwitchingRole(true)
+  setSwitchRoleError(null)
+
+  try {
+    const res = await fetch('/api/crm/application', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: app.id,
+        action: 'switch_role',
+        new_vacancy_id: switchRoleVacancyId,
+        reason: switchRoleReason.trim(),
+      }),
+    })
+
+    const json = await res.json()
+
+    if (!res.ok) {
+      throw new Error(json.error || 'Could not switch role.')
+    }
+
+    setApp(json.data)
+    setAiReview(null)
+    setSwitchRoleOpen(false)
+    setSwitchRoleVacancyId('')
+    setSwitchRoleReason('')
+
+    window.location.reload()
+  } catch (error: any) {
+    setSwitchRoleError(error?.message || 'Could not switch role.')
+  } finally {
+    setSwitchingRole(false)
   }
 }
 
@@ -2751,18 +2828,28 @@ Kind regards,`
 
             {activeTab === 'overview' && (
         <OverviewTab
-          app={app}
-          c={c}
-          v={v}
-          client={client}
-          candidateName={candidateName}
-          notes={notes}
-          setNotes={setNotes}
-          saveAndFlash={saveAndFlash}
-          saving={saving}
-          saved={saved}
-          patchApp={patchApp}
-        />
+  app={app}
+  c={c}
+  v={v}
+  client={client}
+  candidateName={candidateName}
+  notes={notes}
+  setNotes={setNotes}
+  saveAndFlash={saveAndFlash}
+  saving={saving}
+  saved={saved}
+  patchApp={patchApp}
+  allVacancies={allVacancies}
+  switchRoleOpen={switchRoleOpen}
+  setSwitchRoleOpen={setSwitchRoleOpen}
+  switchRoleVacancyId={switchRoleVacancyId}
+  setSwitchRoleVacancyId={setSwitchRoleVacancyId}
+  switchRoleReason={switchRoleReason}
+  setSwitchRoleReason={setSwitchRoleReason}
+  switchingRole={switchingRole}
+  switchRoleError={switchRoleError}
+  switchApplicationRole={switchApplicationRole}
+/>
       )}
 
       {activeTab === 'ea_interview' && (
@@ -3965,6 +4052,16 @@ function OverviewTab({
   saving,
   saved,
   patchApp,
+  allVacancies,
+  switchRoleOpen,
+  setSwitchRoleOpen,
+  switchRoleVacancyId,
+  setSwitchRoleVacancyId,
+  switchRoleReason,
+  setSwitchRoleReason,
+  switchingRole,
+  switchRoleError,
+  switchApplicationRole,
 }: {
   app: Application
   c: any
@@ -3977,6 +4074,16 @@ function OverviewTab({
   saving: boolean
   saved: boolean
   patchApp: (updates: Record<string, any>) => Promise<void>
+  allVacancies: SwitchRoleVacancy[]
+switchRoleOpen: boolean
+setSwitchRoleOpen: (value: boolean) => void
+switchRoleVacancyId: string
+setSwitchRoleVacancyId: (value: string) => void
+switchRoleReason: string
+setSwitchRoleReason: (value: string) => void
+switchingRole: boolean
+switchRoleError: string | null
+switchApplicationRole: () => Promise<void>
 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -4049,18 +4156,210 @@ function OverviewTab({
         </div>
 
         <div className="crm-card">
-          <p className="crm-card-title" style={{ marginBottom: 12 }}>
-            Vacancy
-          </p>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 12,
+    }}
+  >
+    <div>
+      <p className="crm-card-title">Vacancy</p>
+      {app.role_switched_at && (
+        <p
+          style={{
+            margin: 0,
+            marginTop: 4,
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          Role switched on{' '}
+          {new Date(app.role_switched_at).toLocaleDateString('en-GB')}
+        </p>
+      )}
+    </div>
 
-          <div className="crm-detail-list">
-            <DetailRow label="Role">{v?.title || '—'}</DetailRow>
-            <DetailRow label="Client">{client?.company_name || '—'}</DetailRow>
-            <DetailRow label="Location">{v?.location || v?.region || '—'}</DetailRow>
-            <DetailRow label="Salary">{v?.salary_display || '—'}</DetailRow>
-            <DetailRow label="Type">{v?.type || '—'}</DetailRow>
-          </div>
+    <button
+      type="button"
+      className="crm-btn-ghost crm-btn-sm"
+      onClick={() => {
+        setSwitchRoleOpen(!switchRoleOpen)
+        setSwitchRoleVacancyId('')
+        setSwitchRoleReason('')
+      }}
+    >
+      Switch role
+    </button>
+  </div>
+
+  <div className="crm-detail-list">
+    <DetailRow label="Role">{v?.title || '—'}</DetailRow>
+    <DetailRow label="Client">{client?.company_name || '—'}</DetailRow>
+    <DetailRow label="Location">{v?.location || v?.region || '—'}</DetailRow>
+    <DetailRow label="Salary">{v?.salary_display || '—'}</DetailRow>
+    <DetailRow label="Type">{v?.type || '—'}</DetailRow>
+  </div>
+
+  {app.role_switch_reason && (
+    <div
+      style={{
+        marginTop: 12,
+        padding: 10,
+        borderRadius: 10,
+        background: '#f8fafc',
+        border: '1px solid var(--border-light)',
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          fontSize: 11,
+          fontWeight: 900,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+        }}
+      >
+        Switch reason
+      </p>
+      <p
+        style={{
+          margin: 0,
+          marginTop: 4,
+          fontSize: 12,
+          color: 'var(--text-dark)',
+          lineHeight: 1.5,
+        }}
+      >
+        {app.role_switch_reason}
+      </p>
+    </div>
+  )}
+
+  {switchRoleOpen && (
+    <div
+      style={{
+        marginTop: 14,
+        padding: 14,
+        borderRadius: 12,
+        background: '#f8fafc',
+        border: '1px solid var(--border-light)',
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          marginBottom: 8,
+          fontSize: 13,
+          fontWeight: 900,
+          color: 'var(--text-dark)',
+        }}
+      >
+        Move this application to another role
+      </p>
+
+      <p
+        style={{
+          margin: 0,
+          marginBottom: 12,
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
+        This keeps the same application record, but changes the current role.
+        It will not create a second application.
+      </p>
+
+      <div className="crm-field" style={{ marginBottom: 10 }}>
+        <label className="crm-label">New role</label>
+        <select
+          className="crm-select"
+          value={switchRoleVacancyId}
+          onChange={event => setSwitchRoleVacancyId(event.target.value)}
+        >
+          <option value="">Choose role...</option>
+
+          {allVacancies
+            .filter(vacancy => vacancy.id !== app.vacancy_id)
+            .map(vacancy => {
+              const vacancyClient = Array.isArray(vacancy.clients)
+                ? vacancy.clients[0]
+                : vacancy.clients
+
+              const sameClient =
+                client?.id && vacancyClient?.id === client.id
+
+              return (
+                <option key={vacancy.id} value={vacancy.id}>
+                  {sameClient ? '★ ' : ''}
+                  {vacancy.title}
+                  {vacancyClient?.company_name
+                    ? ` - ${vacancyClient.company_name}`
+                    : ''}
+                  {vacancy.location || vacancy.region
+                    ? ` (${vacancy.location || vacancy.region})`
+                    : ''}
+                </option>
+              )
+            })}
+        </select>
+      </div>
+
+      <div className="crm-field" style={{ marginBottom: 10 }}>
+        <label className="crm-label">Reason / notes</label>
+        <textarea
+          className="crm-input"
+          rows={3}
+          value={switchRoleReason}
+          onChange={event => setSwitchRoleReason(event.target.value)}
+          placeholder="Example: Client interviewed for BDM but wants to offer an alternative role."
+          style={{ lineHeight: 1.6 }}
+        />
+      </div>
+
+      {switchRoleError && (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: 10,
+            borderRadius: 10,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          {switchRoleError}
         </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          className="crm-btn-ghost crm-btn-sm"
+          onClick={() => setSwitchRoleOpen(false)}
+          disabled={switchingRole}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          className="crm-btn-primary crm-btn-sm"
+          onClick={switchApplicationRole}
+          disabled={switchingRole || !switchRoleVacancyId}
+        >
+          {switchingRole ? 'Switching...' : 'Switch role'}
+        </button>
+      </div>
+    </div>
+  )}
+</div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

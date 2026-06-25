@@ -44,6 +44,7 @@ const DATE_FIELDS = new Set([
   'archived_at',
   'created_at',
   'updated_at',
+  'role_switched_at',
 ])
 
 /**
@@ -128,16 +129,251 @@ function cleanUpdates(updates: Record<string, any>) {
   return safeUpdates
 }
 
+function clean(value: unknown) {
+  return String(value ?? '').trim()
+}
+
+function firstRelation(value: any) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function vacancyLabel(vacancy: any) {
+  if (!vacancy) return 'Unknown role'
+
+  const client = vacancy.clients ? firstRelation(vacancy.clients) : null
+
+  return [vacancy.title, client?.company_name].filter(Boolean).join(' - ')
+}
+
+async function handleSwitchRole({
+  supabase,
+  id,
+  body,
+}: {
+  supabase: ReturnType<typeof getServiceClient>
+  id: string
+  body: any
+}) {
+  const newVacancyId = clean(
+    body.new_vacancy_id ||
+      body.to_vacancy_id ||
+      body.target_vacancy_id ||
+      body.vacancy_id,
+  )
+
+  const reason = clean(body.reason || body.role_switch_reason)
+
+  if (!newVacancyId) {
+    return NextResponse.json(
+      { error: 'Please choose the new vacancy/role.' },
+      { status: 400 },
+    )
+  }
+
+  const { data: currentApplication, error: currentError } = await supabase
+    .from('applications')
+    .select(`
+      id,
+      candidate_id,
+      vacancy_id,
+      original_vacancy_id,
+      vacancies (
+        id,
+        title,
+        clients (
+          id,
+          company_name
+        )
+      )
+    `)
+    .eq('id', id)
+    .single()
+
+  if (currentError || !currentApplication) {
+    return NextResponse.json(
+      { error: currentError?.message || 'Application not found.' },
+      { status: 404 },
+    )
+  }
+
+  if (currentApplication.vacancy_id === newVacancyId) {
+    return NextResponse.json(
+      { error: 'This application is already linked to that role.' },
+      { status: 400 },
+    )
+  }
+
+  const { data: targetVacancy, error: targetError } = await supabase
+    .from('vacancies')
+    .select(`
+      id,
+      title,
+      clients (
+        id,
+        company_name
+      )
+    `)
+    .eq('id', newVacancyId)
+    .single()
+
+  if (targetError || !targetVacancy) {
+    return NextResponse.json(
+      { error: targetError?.message || 'New vacancy not found.' },
+      { status: 404 },
+    )
+  }
+
+  const now = new Date().toISOString()
+
+  const originalVacancyId =
+    currentApplication.original_vacancy_id ||
+    currentApplication.vacancy_id ||
+    null
+
+  const { data: updatedApplication, error: updateError } = await supabase
+    .from('applications')
+    .update({
+      vacancy_id: newVacancyId,
+      original_vacancy_id: originalVacancyId,
+      role_switched_at: now,
+      role_switch_reason: reason || null,
+      updated_at: now,
+    })
+    .eq('id', id)
+    .select(`
+      *,
+      candidates (
+        id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        job_title,
+        main_role_type,
+        sub_role_type,
+        seeking_role_type,
+        looking_for_roles,
+        formatted_cv,
+        notes,
+        qualifications,
+        can_deliver,
+        preferred_location,
+        address_line_1,
+        address_line_2,
+        town_city,
+        county,
+        postcode,
+        source,
+        status,
+        actively_looking,
+        work_type_pref,
+        current_salary,
+        salary_expected,
+        salary_notes,
+        notice_period,
+        dbs_status,
+        right_to_work,
+        cv_url,
+        linkedin
+      ),
+      vacancies (
+        id,
+        title,
+        sector,
+        role_type,
+        type,
+        location,
+        region,
+        salary_display,
+        description,
+        employer_job_description,
+        anonymous_description,
+        briefing_notes,
+        clients (
+          id,
+          company_name,
+          contact_name,
+          email,
+          website
+        )
+      )
+    `)
+    .single()
+
+  if (updateError) {
+    console.error('Application role switch update error:', updateError)
+
+    return NextResponse.json(
+      { error: updateError.message },
+      { status: 400 },
+    )
+  }
+
+  const historyError = await supabase
+    .from('application_role_changes')
+    .insert({
+      application_id: currentApplication.id,
+      candidate_id: currentApplication.candidate_id,
+      from_vacancy_id: currentApplication.vacancy_id,
+      to_vacancy_id: newVacancyId,
+      reason: reason || null,
+      changed_at: now,
+    })
+    .then(result => result.error)
+
+  if (historyError) {
+    console.error('Application role change history error:', historyError)
+  }
+
+  const activityContent = [
+    'Application role switched.',
+    `From: ${vacancyLabel(currentApplication.vacancies)}`,
+    `To: ${vacancyLabel(targetVacancy)}`,
+    reason ? `Reason: ${reason}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  if (currentApplication.candidate_id) {
+    const { error: activityError } = await supabase
+      .from('candidate_activities')
+      .insert({
+        candidate_id: currentApplication.candidate_id,
+        activity_type: 'note',
+        content: activityContent,
+      })
+
+    if (activityError) {
+      console.error('Application role switch activity error:', activityError)
+    }
+  }
+
+  return NextResponse.json({
+    data: updatedApplication,
+    switched: true,
+  })
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, action, ...updates } = body
 
     if (!id) {
       return NextResponse.json(
         { error: 'Application ID required.' },
         { status: 400 },
       )
+    }
+
+    const supabase = getServiceClient()
+
+    if (action === 'switch_role' || action === 'switchRole') {
+      return handleSwitchRole({
+        supabase,
+        id,
+        body,
+      })
     }
 
     const safeUpdates = cleanUpdates(updates)
@@ -163,8 +399,6 @@ if (Object.keys(safeUpdates).length === 0) {
     { status: 400 },
   )
 }
-
-const supabase = getServiceClient()
 
     const { data, error } = await supabase
       .from('applications')
