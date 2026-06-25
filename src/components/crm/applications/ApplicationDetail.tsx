@@ -4183,6 +4183,10 @@ function OriginalCvPanel({
   const [fileUrl, setFileUrl] = useState('')
   const [loadingUrl, setLoadingUrl] = useState(false)
   const [urlError, setUrlError] = useState<string | null>(null)
+  const [loadingWordPreview, setLoadingWordPreview] = useState(false)
+  const [wordPreviewError, setWordPreviewError] = useState<string | null>(null)
+
+  const wordPreviewRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -4224,6 +4228,65 @@ function OriginalCvPanel({
   }, [document?.id, fallbackUrl, hasStoredFile, document])
 
   const fileKind = getFileKind(fileUrl || document?.file_url || fallbackUrl || fileName)
+  const isDocx = /\.(docx)(\?|$)/i.test(
+    fileUrl || document?.storage_path || document?.file_url || fileName || '',
+  )
+  const isOldDoc = /\.(doc)(\?|$)/i.test(
+    fileUrl || document?.storage_path || document?.file_url || fileName || '',
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function renderWordPreview() {
+      if (!fileUrl || !isDocx || !wordPreviewRef.current) return
+
+      setLoadingWordPreview(true)
+      setWordPreviewError(null)
+      wordPreviewRef.current.innerHTML = ''
+
+      try {
+        const response = await fetch(fileUrl)
+
+        if (!response.ok) {
+          throw new Error(`Could not load Word document preview (${response.status}).`)
+        }
+
+        const blob = await response.blob()
+
+        if (cancelled || !wordPreviewRef.current) return
+
+        const { renderAsync } = await import('docx-preview')
+
+        await renderAsync(blob, wordPreviewRef.current, undefined, {
+          className: 'crm-docx-preview',
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          renderHeaders: true,
+          renderFooters: true,
+        })
+      } catch (error: any) {
+        if (!cancelled) {
+          setWordPreviewError(
+            error?.message || 'Could not preview this Word document.',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWordPreview(false)
+        }
+      }
+    }
+
+    renderWordPreview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fileUrl, isDocx])
 
   async function openCv() {
     if (fileUrl) {
@@ -4301,6 +4364,56 @@ function OriginalCvPanel({
           title={fileName}
           style={{ width: '100%', height: 520, border: 0, background: '#fff' }}
         />
+      ) : fileUrl && isDocx ? (
+        <div
+          style={{
+            height: 520,
+            overflow: 'auto',
+            background: '#e5e7eb',
+            padding: 16,
+          }}
+        >
+          {loadingWordPreview && (
+            <div
+              style={{
+                padding: 18,
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                background: '#fff',
+                borderRadius: 12,
+                border: '1px solid var(--border-light)',
+              }}
+            >
+              Loading Word preview...
+            </div>
+          )}
+
+          {wordPreviewError && (
+            <div
+              style={{
+                padding: 18,
+                fontSize: 12,
+                color: '#dc2626',
+                fontWeight: 800,
+                background: '#fff',
+                borderRadius: 12,
+                border: '1px solid #fecaca',
+              }}
+            >
+              {wordPreviewError}
+            </div>
+          )}
+
+          <div
+            ref={wordPreviewRef}
+            style={{
+              background: '#fff',
+              minHeight: 480,
+              margin: '0 auto',
+              boxShadow: '0 12px 30px rgba(15, 23, 42, 0.18)',
+            }}
+          />
+        </div>
       ) : fileUrl && fileKind === 'image' ? (
         <div
           style={{
@@ -4317,6 +4430,17 @@ function OriginalCvPanel({
             alt={fileName}
             style={{ maxWidth: '100%', maxHeight: 500, objectFit: 'contain' }}
           />
+        </div>
+      ) : isOldDoc ? (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <p style={{ fontSize: 28, marginBottom: 8 }}>📄</p>
+          <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-dark)' }}>
+            Old Word document preview not available
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+            Older .doc files cannot be previewed in-browser. Open the original or
+            re-save it as .docx/PDF.
+          </p>
         </div>
       ) : (
         <div style={{ padding: 24, textAlign: 'center' }}>
