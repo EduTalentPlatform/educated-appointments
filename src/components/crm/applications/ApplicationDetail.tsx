@@ -2731,13 +2731,13 @@ Kind regards,`
       <div className="crm-tabs">
   {[
     { id: 'overview', label: '◈ Overview' },
-    { id: 'ea_interview', label: '🎙 EA Interview' },
-    { id: 'client_interview', label: '🏢 Client Interview' },
-    { id: 'ai_review', label: '✦ AI Review' },
-    { id: 'profile', label: '📄 Profile Builder' },
-    { id: 'portal', label: '🔐 Employer Portal' },
-    { id: 'documents', label: `📎 Documents (${documentCount})` },
-    { id: 'activity', label: `📋 Activity (${activityItems.length})` },
+{ id: 'ai_review', label: '✦ AI Review' },
+{ id: 'ea_interview', label: '🎙 EA Interview' },
+{ id: 'profile', label: '📄 Profile Builder' },
+{ id: 'portal', label: '🔐 Employer Portal' },
+{ id: 'client_interview', label: '🏢 Client Interview' },
+{ id: 'documents', label: `📎 Documents (${documentCount})` },
+{ id: 'activity', label: `📋 Activity (${activityItems.length})` },
   ].map(tab => (
     <button
       key={tab.id}
@@ -4342,89 +4342,219 @@ function CompactAiReviewPanel({
   runningAiReview: boolean
   runReview: () => void
 }) {
-  return (
-    <div className="crm-card">
+  function ReviewSection({
+    title,
+    icon,
+    items,
+    emptyText,
+  }: {
+    title: string
+    icon: string
+    items?: string[] | null
+    emptyText: string
+  }) {
+    const safeItems = Array.isArray(items)
+      ? items.filter(item => String(item || '').trim())
+      : []
+
+    return (
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 10,
-          alignItems: 'center',
-          marginBottom: 10,
+          border: '1px solid var(--border-light)',
+          borderRadius: 12,
+          padding: 12,
+          background: '#fff',
         }}
       >
-        <p className="crm-card-title">AI Review</p>
+        <p
+          style={{
+            margin: 0,
+            marginBottom: 8,
+            fontSize: 12,
+            fontWeight: 900,
+            color: 'var(--text-dark)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <span>{icon}</span>
+          {title}
+        </p>
+
+        {safeItems.length === 0 ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              lineHeight: 1.5,
+            }}
+          >
+            {emptyText}
+          </p>
+        ) : (
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            {safeItems.map((item, index) => (
+              <li
+                key={`${title}-${index}-${item}`}
+                style={{
+                  fontSize: 12,
+                  color: 'var(--text-dark)',
+                  lineHeight: 1.55,
+                }}
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="crm-card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div
+        style={{
+          padding: 14,
+          borderBottom: '1px solid var(--border-light)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 12,
+          alignItems: 'flex-start',
+          background: '#f8fafc',
+        }}
+      >
+        <div>
+          <p className="crm-card-title">AI Review</p>
+          <p
+            style={{
+              margin: 0,
+              marginTop: 4,
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              lineHeight: 1.5,
+            }}
+          >
+            Screening notes to support the EA interview.
+          </p>
+        </div>
 
         <button
           type="button"
           className="crm-btn-ghost crm-btn-sm"
           onClick={runReview}
           disabled={runningAiReview}
+          style={{ whiteSpace: 'nowrap' }}
         >
-          {runningAiReview ? 'Loading...' : aiReview ? 'Refresh' : 'Run'}
+          {runningAiReview ? 'Loading...' : aiReview ? 'Refresh' : 'Run review'}
         </button>
       </div>
 
       {!aiReview ? (
-        <p className="crm-empty">
-          No AI review yet. Run it before or during the EA interview.
-        </p>
+        <div style={{ padding: 16 }}>
+          <p className="crm-empty">
+            No AI review yet. Run it before or during the EA interview.
+          </p>
+        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span className="crm-badge crm-badge-blue">
-              {aiReview.overall_fit || 'Unclear'}
-            </span>
-
-            {aiReview.score !== null && aiReview.score !== undefined && (
-              <span className="crm-badge crm-badge-blue">
-                {aiReview.score}/100
-              </span>
-            )}
-          </div>
-
-          <p
+        <div
+          style={{
+            padding: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div
             style={{
-              fontSize: 12,
-              color: 'var(--text-dark)',
-              lineHeight: 1.6,
+              border: '1px solid var(--border-light)',
+              borderRadius: 12,
+              padding: 12,
+              background: '#fff',
             }}
           >
-            {aiReview.summary || 'No summary returned.'}
-          </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                marginBottom: 10,
+              }}
+            >
+              <span className="crm-badge crm-badge-blue">
+                {aiReview.overall_fit || 'Unclear'}
+              </span>
 
-          {Array.isArray(aiReview.candidate_questions) &&
-            aiReview.candidate_questions.length > 0 && (
-              <div>
-                <p
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    marginBottom: 6,
-                  }}
-                >
-                  Questions to ask
-                </p>
+              {aiReview.score !== null && aiReview.score !== undefined && (
+                <span className="crm-badge crm-badge-blue">
+                  {aiReview.score}/100
+                </span>
+              )}
 
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {aiReview.candidate_questions.slice(0, 4).map(question => (
-                    <li
-                      key={question}
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-dark)',
-                        lineHeight: 1.5,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {question}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              {aiReview.recommended_next_action && (
+                <span className="crm-badge crm-badge-green">
+                  {aiReview.recommended_next_action}
+                </span>
+              )}
+            </div>
+
+            <p
+              style={{
+                margin: 0,
+                fontSize: 12,
+                color: 'var(--text-dark)',
+                lineHeight: 1.65,
+              }}
+            >
+              {aiReview.summary || 'No summary returned.'}
+            </p>
+          </div>
+
+          <ReviewSection
+            title="What is good about them"
+            icon="✅"
+            items={aiReview.strengths}
+            emptyText="No strengths returned."
+          />
+
+          <ReviewSection
+            title="Missing or unclear"
+            icon="❓"
+            items={aiReview.missing_or_unclear}
+            emptyText="No missing or unclear points returned."
+          />
+
+          <ReviewSection
+            title="Risks / concerns"
+            icon="⚠️"
+            items={aiReview.risks}
+            emptyText="No risks returned."
+          />
+
+          <ReviewSection
+            title="Questions to ask the candidate"
+            icon="🎙"
+            items={aiReview.candidate_questions}
+            emptyText="No candidate questions returned."
+          />
+
+          <ReviewSection
+            title="Questions to ask the client"
+            icon="🏢"
+            items={aiReview.client_questions}
+            emptyText="No client questions returned."
+          />
         </div>
       )}
     </div>
