@@ -183,6 +183,8 @@ const [aiOutreachType, setAiOutreachType] = useState<'email' | 'linkedin'>(
 const [aiOutreachTone, setAiOutreachTone] = useState('professional')
 const [aiOutreachContext, setAiOutreachContext] = useState('')
 const [generatingOutreachDraft, setGeneratingOutreachDraft] = useState(false)
+const [generatingOpportunityDraftId, setGeneratingOpportunityDraftId] =
+  useState<string | null>(null)
 const [aiOutreachDraft, setAiOutreachDraft] = useState<{
   subject: string
   body: string
@@ -603,6 +605,16 @@ function findSavedOpportunity(job: any) {
   })
 }
 
+function findOutreachForOpportunity(opportunityId?: string | null) {
+  if (!opportunityId) return null
+
+  return (
+    specOutreach.find(
+      (item: any) => item.opportunity_id === opportunityId,
+    ) ?? null
+  )
+}
+
 async function saveLiveJobOpportunity(job: any) {
   const key = getJobKey(job)
 
@@ -767,6 +779,110 @@ async function convertOpportunityToLead(opportunityId: string) {
   }
 
   setAddingNote(false)
+}
+
+async function generateOpportunityOutreachDraft(opportunity: any) {
+  if (!opportunity?.id) {
+    alert('Save the opportunity first.')
+    return
+  }
+
+  const existingOutreach = findOutreachForOpportunity(opportunity.id)
+
+  setGeneratingOpportunityDraftId(opportunity.id)
+
+  const res = await fetch('/api/crm/speculations', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'generate_spec_outreach_message',
+      speculation_id: speculation.id,
+      opportunity_id: opportunity.id,
+      outreach_id: existingOutreach?.id || null,
+      message_type: 'email',
+      tone: 'professional',
+      persist_draft: true,
+
+      employer: {
+        company_name: opportunity.employer_name || '',
+        job_title: opportunity.job_title || '',
+        website: opportunity.url || '',
+        sector: opportunity.job_type || '',
+        region: opportunity.region || opportunity.location || '',
+      },
+
+      reason_for_approach:
+        opportunity.match_summary ||
+        opportunity.why_candidate_matches ||
+        opportunity.notes ||
+        '',
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(data?.error || 'Could not generate anonymous email draft.')
+    setGeneratingOpportunityDraftId(null)
+    return
+  }
+
+  if (data.outreach) {
+    setSpecOutreach((current: any[]) => {
+      const exists = current.some((item: any) => item.id === data.outreach.id)
+
+      return exists
+        ? current.map((item: any) =>
+            item.id === data.outreach.id ? data.outreach : item,
+          )
+        : [data.outreach, ...current]
+    })
+  }
+
+  if (data.opportunity) {
+    setSavedOpportunities((current: any[]) =>
+      current.map((item: any) =>
+        item.id === data.opportunity.id ? data.opportunity : item,
+      ),
+    )
+  }
+
+  if (data.note) {
+    setSpeculationNotes(current => [data.note, ...current])
+  }
+
+  // Fallback if the saved job does not yet have an outreach row.
+  if (!data.outreach) {
+    setOutreachForm(current => ({
+      ...current,
+      source_type: 'manual',
+      employer_name: opportunity.employer_name || current.employer_name,
+      website: opportunity.url || current.website,
+      sector: opportunity.job_type || current.sector,
+      region: opportunity.region || opportunity.location || current.region,
+      outreach_type: 'email',
+      status: 'not_contacted',
+      reason_for_approach:
+        data.reason_for_approach ||
+        opportunity.match_summary ||
+        current.reason_for_approach,
+      message_sent: [
+        data.subject ? `Subject: ${data.subject}` : '',
+        data.body || '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    }))
+
+    setAiOutreachDraft({
+      subject: data.subject || '',
+      body: data.body || '',
+      linkedin_message: data.linkedin_message || '',
+    })
+  }
+
+  setGeneratingOpportunityDraftId(null)
+  setActiveTab('targets')
 }
 
 function selectedOutreachSource() {
@@ -3676,9 +3792,16 @@ search_notes: [
             .sort((a, b) => (Number(b.match_score) || 0) - (Number(a.match_score) || 0))
             .map((job, index) => {
               const savedOpportunity = findSavedOpportunity(job)
-              const isSaved = Boolean(savedOpportunity)
-              const jobKey = getJobKey(job)
-              const isSaving = savingJobKey === jobKey
+const savedOpportunityOutreach = savedOpportunity
+  ? findOutreachForOpportunity(savedOpportunity.id)
+  : null
+
+const isSaved = Boolean(savedOpportunity)
+const jobKey = getJobKey(job)
+const isSaving = savingJobKey === jobKey
+const isDraftingOpportunity =
+  Boolean(savedOpportunity?.id) &&
+  generatingOpportunityDraftId === savedOpportunity.id
 
               const isRecent =
                 job.posted_days_ago !== null &&
@@ -3915,37 +4038,52 @@ search_notes: [
                     </button>
 
                     {savedOpportunity && (
-                      <>
-                        {savedOpportunity.client_id ? (
-                          <Link
-                            href={`/crm/clients/${savedOpportunity.client_id}`}
-                            className="crm-btn-ghost crm-btn-sm"
-                            style={{ textDecoration: 'none' }}
-                          >
-                            Open client →
-                          </Link>
-                        ) : savedOpportunity.lead_id ? (
-                          <Link
-                            href={`/crm/leads/${savedOpportunity.lead_id}`}
-                            className="crm-btn-ghost crm-btn-sm"
-                            style={{ textDecoration: 'none' }}
-                          >
-                            Open lead →
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            className="crm-btn-ai crm-btn-sm"
-                            onClick={() => convertOpportunityToLead(savedOpportunity.id)}
-                            disabled={convertingOpportunityId === savedOpportunity.id}
-                          >
-                            {convertingOpportunityId === savedOpportunity.id
-                              ? 'Checking...'
-                              : 'Add as lead'}
-                          </button>
-                        )}
-                      </>
-                    )}
+  <>
+    {savedOpportunity.client_id ? (
+      <Link
+        href={`/crm/clients/${savedOpportunity.client_id}`}
+        className="crm-btn-ghost crm-btn-sm"
+        style={{ textDecoration: 'none' }}
+      >
+        Open client →
+      </Link>
+    ) : savedOpportunity.lead_id ? (
+      <Link
+        href={`/crm/leads/${savedOpportunity.lead_id}`}
+        className="crm-btn-ghost crm-btn-sm"
+        style={{ textDecoration: 'none' }}
+      >
+        Open lead →
+      </Link>
+    ) : (
+      <button
+        type="button"
+        className="crm-btn-ai crm-btn-sm"
+        onClick={() =>
+          convertOpportunityToLead(savedOpportunity.id)
+        }
+        disabled={convertingOpportunityId === savedOpportunity.id}
+      >
+        {convertingOpportunityId === savedOpportunity.id
+          ? 'Checking...'
+          : 'Add as lead'}
+      </button>
+    )}
+
+    <button
+      type="button"
+      className="crm-btn-ai crm-btn-sm"
+      onClick={() => generateOpportunityOutreachDraft(savedOpportunity)}
+      disabled={isDraftingOpportunity}
+    >
+      {isDraftingOpportunity
+        ? 'Drafting...'
+        : savedOpportunityOutreach?.message_sent
+          ? 'Redraft anonymous email'
+          : 'Draft anonymous email'}
+    </button>
+  </>
+)}
                   </div>
                 </article>
               )

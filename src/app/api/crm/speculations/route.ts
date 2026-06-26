@@ -2045,11 +2045,14 @@ return NextResponse.json({ opportunity, outreach, note })
 
     if (action === 'generate_spec_outreach_message') {
   const speculationId = cleanString(body.speculation_id || body.speculationId)
+  const opportunityId = cleanString(body.opportunity_id || body.opportunityId)
+  const outreachId = cleanString(body.outreach_id || body.outreachId)
   const messageType = cleanString(body.message_type || body.messageType) || 'email'
   const tone = cleanString(body.tone) || 'professional'
   const extraContext = cleanString(body.extra_context || body.extraContext)
   const employer = body.employer || {}
   const reasonForApproach = cleanString(body.reason_for_approach)
+  const persistDraft = body.persist_draft !== false
 
   if (!speculationId) {
     return NextResponse.json(
@@ -2078,7 +2081,9 @@ return NextResponse.json({ opportunity, outreach, note })
         seeking_role_type,
         main_role_type,
         sub_role_type,
-        notes
+        looking_for_roles,
+        notes,
+        formatted_cv
       )
     `)
     .eq('id', speculationId)
@@ -2095,82 +2100,226 @@ return NextResponse.json({ opportunity, outreach, note })
     ? speculation.candidates[0] ?? null
     : speculation.candidates ?? null
 
+  if (!candidate) {
+    return NextResponse.json(
+      { error: 'Candidate not found for this speculation.' },
+      { status: 404 },
+    )
+  }
+
+  let opportunity: any = null
+
+  if (opportunityId) {
+    const { data, error } = await supabase
+      .from('candidate_speculation_opportunities')
+      .select('*')
+      .eq('id', opportunityId)
+      .eq('speculation_id', speculationId)
+      .maybeSingle()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    opportunity = data
+  }
+
+  let outreach: any = null
+
+  if (outreachId) {
+    const { data, error } = await supabase
+      .from('speculation_outreach')
+      .select('*')
+      .eq('id', outreachId)
+      .eq('speculation_id', speculationId)
+      .maybeSingle()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    outreach = data
+  }
+
+  if (!outreach && opportunityId) {
+    const { data, error } = await supabase
+      .from('speculation_outreach')
+      .select('*')
+      .eq('opportunity_id', opportunityId)
+      .eq('speculation_id', speculationId)
+      .maybeSingle()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    outreach = data
+  }
+
+  const employerName =
+    cleanString(opportunity?.employer_name) ||
+    cleanString(outreach?.employer_name) ||
+    cleanString(employer.employer_name) ||
+    cleanString(employer.company_name) ||
+    cleanString(employer.name)
+
+  const jobTitle =
+    cleanString(opportunity?.job_title) ||
+    cleanString(employer.job_title) ||
+    cleanString(speculation.target_role)
+
   const prompt = `
-You are writing recruitment outreach for Educated Appointments, a specialist FE & Skills recruitment agency.
+You are writing anonymous recruitment outreach for Educated Appointments, a specialist UK recruitment agency working across Further Education, Skills, Apprenticeships and Training.
 
 Task:
-Draft a ${messageType === 'linkedin' ? 'LinkedIn message' : 'speculative candidate outreach email'} to an employer about a candidate.
+Draft a ${messageType === 'linkedin' ? 'LinkedIn message' : 'speculative candidate outreach email'} to an employer based on a saved live job opportunity and a candidate being speculated.
 
-Important rules:
+This is NOT a generic speculative approach.
+It must be clearly based on the saved live job and why the anonymous candidate appears relevant.
+
+Critical anonymity rules:
+- Do not include the candidate's name.
+- Do not include the candidate's email or phone number.
+- Do not include the candidate's exact postcode or address.
+- Do not include the candidate's current employer or previous employer names.
+- Do not copy identifying detail from the CV.
+- Keep location broad only, for example "based in the Midlands" or "within reach of..." if supported by the data.
+- If a detail risks identifying the candidate, omit it.
+- Keep the candidate confidential until the employer confirms interest.
+
+Accuracy rules:
 - Do not invent facts.
-- Use only the candidate/speculation data provided.
-- If something is unknown, omit it.
-- Do not claim the candidate has experience in a sector unless the data says so.
-- If relevant experience is transferable rather than direct, say that clearly.
-- Keep the candidate anonymous unless the data specifically requires naming them.
-- Sound professional, warm and credible.
-- The aim is to make the employer want to speak with Educated Appointments about the candidate.
-- Do not overdo it. No cheesy sales language.
+- Use only the data provided.
+- If something is unclear, omit it.
+- Do not say the candidate is perfect.
+- Use credible language such as "could be worth a conversation", "appears relevant", "looks closely aligned", or "may be worth discussing".
+- If experience is transferable rather than direct, make that clear.
+- Do not overstate qualifications, standards, management experience or sector exposure.
 
-Tone: ${tone}
+Tone:
+${tone}
 
-Employer:
-${JSON.stringify(employer, null, 2)}
-
-Reason for approach:
-${reasonForApproach || 'Not specified'}
-
-Extra context from recruiter:
-${extraContext || 'None'}
-
-Candidate record:
-${JSON.stringify(candidate, null, 2)}
-
-Speculation/profile data:
-${JSON.stringify(
-  {
-    target_role: speculation.target_role,
-    target_sector: speculation.target_sector,
-    profile_summary: speculation.profile_summary,
-    key_strengths: speculation.key_strengths,
-    selling_points: speculation.selling_points,
-    salary_expectation: speculation.salary_expectation,
-    availability: speculation.availability,
-    location: speculation.location,
-    notes: speculation.notes,
-  },
-  null,
-  2,
-)}
+Style:
+- Human, warm, credible and consultative.
+- UK English.
+- Recruitment-led, not spammy.
+- Mention the employer's live vacancy early.
+- Explain the candidate fit in plain English.
+- Keep it concise but useful.
+- Do not use cheesy sales language.
+- Do not use phrases like "game-changer", "perfect fit", "exciting opportunity", or "just touching base".
+- Sign off naturally as Joseph / Educated Appointments only if an email is requested.
 
 Return ONLY valid JSON in this exact shape:
 {
   "subject": "email subject line, or empty string for LinkedIn",
   "body": "email body, or empty string for LinkedIn",
-  "linkedin_message": "LinkedIn message, or empty string for email"
+  "linkedin_message": "LinkedIn message, or empty string for email",
+  "reason_for_approach": "short internal explanation of why this employer/job is being approached",
+  "fit_summary": "short internal candidate-to-job fit summary"
 }
+
+Saved live job opportunity:
+${safeText(JSON.stringify({
+  job_title: opportunity?.job_title,
+  employer_name: opportunity?.employer_name,
+  location: opportunity?.location,
+  region: opportunity?.region,
+  salary: opportunity?.salary,
+  job_type: opportunity?.job_type,
+  source: opportunity?.source,
+  url: opportunity?.url,
+  posted_days_ago: opportunity?.posted_days_ago,
+  matched_standard: opportunity?.matched_standard,
+  match_score: opportunity?.match_score,
+  match_summary: opportunity?.match_summary,
+  concerns: opportunity?.concerns,
+  notes: opportunity?.notes,
+}, null, 2), 8000)}
+
+Existing employer / outreach record:
+${safeText(JSON.stringify({
+  employer_name: outreach?.employer_name,
+  contact_name: outreach?.contact_name,
+  contact_title: outreach?.contact_title,
+  website: outreach?.website,
+  sector: outreach?.sector,
+  region: outreach?.region,
+  reason_for_approach: outreach?.reason_for_approach,
+  call_notes: outreach?.call_notes,
+  response_notes: outreach?.response_notes,
+  outcome_notes: outreach?.outcome_notes,
+}, null, 2), 6000)}
+
+Employer details passed from the page:
+${safeText(JSON.stringify(employer, null, 2), 4000)}
+
+Reason for approach entered by recruiter:
+${reasonForApproach || 'Not specified'}
+
+Extra recruiter context:
+${extraContext || 'None'}
+
+Candidate anonymous/speculation profile:
+${safeText(JSON.stringify({
+  target_role: speculation.target_role,
+  target_roles: speculation.target_roles,
+  target_sector: speculation.target_sector,
+  target_regions: speculation.target_regions,
+  profile_summary: speculation.profile_summary,
+  anonymous_profile: speculation.anonymous_profile,
+  candidate_requirements: speculation.candidate_requirements,
+  key_selling_points: speculation.key_selling_points,
+}, null, 2), 10000)}
+
+Candidate record:
+${safeText(JSON.stringify({
+  current_job_title: candidate.job_title,
+  seeking_role_type: candidate.seeking_role_type,
+  main_role_type: candidate.main_role_type,
+  sub_role_type: candidate.sub_role_type,
+  looking_for_roles: candidate.looking_for_roles,
+  preferred_location: candidate.preferred_location,
+  town_city: candidate.town_city,
+  county: candidate.county,
+  salary_expected: candidate.salary_expected,
+  notice_period: candidate.notice_period,
+  qualifications: candidate.qualifications,
+  can_deliver: candidate.can_deliver,
+  notes: candidate.notes,
+}, null, 2), 9000)}
+
+CV excerpt for context only — anonymise heavily and do not copy employer names:
+${safeText(candidate.formatted_cv, 5000)}
 `
 
-  const { text } = await callAI(prompt, { maxTokens: 1800 })
-
-  const clean = text
-    .replace(/```json\n?/g, '')
-    .replace(/```\n?/g, '')
-    .trim()
-
-  const match = clean.match(/\{[\s\S]*\}/)
-
-  if (!match) {
-    return NextResponse.json(
-      { error: 'Could not generate outreach draft.' },
-      { status: 422 },
-    )
-  }
+  const { text } = await callAI(prompt, {
+    maxTokens: 2600,
+    temperature: 0.45,
+    taskType: 'outreach',
+    route: '/api/crm/speculations',
+    metadata: {
+      action: 'generate_spec_outreach_message',
+      speculation_id: speculationId,
+      opportunity_id: opportunityId,
+      outreach_id: outreachId,
+      employer_name: employerName,
+      job_title: jobTitle,
+      message_type: messageType,
+    },
+    system: `
+You return valid JSON only.
+You write anonymous recruitment outreach for Educated Appointments.
+You must protect candidate identity and avoid naming the candidate, their contact details, postcode, address, current employer or previous employer names.
+Do not invent facts.
+Keep the tone human, credible, warm and recruitment-led.
+`.trim(),
+  })
 
   let result: any
 
   try {
-    result = JSON.parse(match[0])
+    result = parseJsonFromClaude(text)
   } catch {
     return NextResponse.json(
       { error: 'Could not parse outreach draft.' },
@@ -2178,10 +2327,78 @@ Return ONLY valid JSON in this exact shape:
     )
   }
 
+  const subject = cleanString(result.subject) || ''
+  const bodyText = cleanString(result.body) || ''
+  const linkedinMessage = cleanString(result.linkedin_message) || ''
+  const generatedReasonForApproach =
+    cleanString(result.reason_for_approach) ||
+    reasonForApproach ||
+    cleanString(outreach?.reason_for_approach) ||
+    cleanString(opportunity?.match_summary)
+
+  const fitSummary =
+    cleanString(result.fit_summary) ||
+    cleanString(opportunity?.match_summary) ||
+    null
+
+  let updatedOutreach: any = null
+
+  if (persistDraft && outreach?.id) {
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (generatedReasonForApproach) {
+      updatePayload.reason_for_approach = generatedReasonForApproach
+    }
+
+    if (messageType === 'linkedin') {
+      updatePayload.linkedin_message_sent = linkedinMessage
+    } else {
+      updatePayload.message_sent = bodyText
+    }
+
+    if (fitSummary && !outreach.call_notes) {
+      updatePayload.call_notes = fitSummary
+    }
+
+    const { data, error } = await supabase
+      .from('speculation_outreach')
+      .update(updatePayload)
+      .eq('id', outreach.id)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    updatedOutreach = data
+  }
+
+  await supabase
+    .from('speculation_notes')
+    .insert({
+      speculation_id: speculationId,
+      note_type: 'note',
+      content: [
+        'AI anonymous outreach draft generated.',
+        employerName ? `Employer: ${employerName}` : null,
+        jobTitle ? `Job: ${jobTitle}` : null,
+        opportunityId ? `Saved live job opportunity used.` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    })
+
   return NextResponse.json({
-    subject: result.subject || '',
-    body: result.body || '',
-    linkedin_message: result.linkedin_message || '',
+    subject,
+    body: bodyText,
+    linkedin_message: linkedinMessage,
+    reason_for_approach: generatedReasonForApproach || '',
+    fit_summary: fitSummary || '',
+    opportunity,
+    outreach: updatedOutreach || outreach || null,
   })
 }
     
