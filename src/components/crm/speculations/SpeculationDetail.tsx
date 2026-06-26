@@ -184,6 +184,8 @@ const [aiOutreachType, setAiOutreachType] = useState<'email' | 'linkedin'>(
 const [aiOutreachTone, setAiOutreachTone] = useState('professional')
 const [aiOutreachContext, setAiOutreachContext] = useState('')
 const [generatingOutreachDraft, setGeneratingOutreachDraft] = useState(false)
+const [draftingEmployerOutreachId, setDraftingEmployerOutreachId] =
+  useState<string | null>(null)
 const [generatingOpportunityDraftId, setGeneratingOpportunityDraftId] =
   useState<string | null>(null)
 const [aiOutreachDraft, setAiOutreachDraft] = useState<{
@@ -490,6 +492,157 @@ function splitCommaList(value: string) {
     .split(',')
     .map(item => item.trim())
     .filter(Boolean)
+}
+
+function openEmployerActionForm(
+  item: any,
+  action: 'note' | 'call' | 'email',
+) {
+  setShowAddEmployerForm(true)
+  setAiOutreachDraft(null)
+
+  setOutreachForm(current => ({
+    ...current,
+    source_type: item.lead_id ? 'lead' : item.client_id ? 'client' : 'manual',
+    linked_record_id: item.lead_id || item.client_id || '',
+
+    employer_name: item.employer_name || '',
+    contact_name: item.contact_name || '',
+    contact_title: item.contact_title || '',
+    contact_email: item.contact_email || item.email || '',
+    contact_phone: item.contact_phone || item.phone || '',
+    website: item.website || '',
+    sector: item.sector || '',
+    region: item.region || '',
+
+    outreach_direction: action === 'note' ? 'internal' : 'outbound',
+    outreach_type:
+      action === 'call'
+        ? 'call'
+        : action === 'note'
+          ? 'internal_note'
+          : 'email',
+    status:
+      action === 'call'
+        ? 'called'
+        : action === 'email'
+          ? 'email_sent'
+          : item.status || 'not_contacted',
+
+    reason_for_approach: item.reason_for_approach || '',
+    message_sent: action === 'email' ? item.message_sent || '' : '',
+    linkedin_message_sent: '',
+    call_notes: action === 'call' ? item.call_notes || '' : '',
+    response_notes: item.response_notes || '',
+    follow_up_date: item.follow_up_date || '',
+  }))
+
+  window.setTimeout(() => {
+    document
+      .getElementById('spec-add-employer-form')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 50)
+}
+
+async function draftSpeculativeEmailForEmployer(item: any) {
+  if (!item?.employer_name) {
+    alert('Employer name is missing.')
+    return
+  }
+
+  setDraftingEmployerOutreachId(item.id)
+  setShowAddEmployerForm(true)
+  setAiOutreachType('email')
+  setAiOutreachDraft(null)
+
+  const res = await fetch('/api/crm/speculations', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'generate_spec_outreach_message',
+      speculation_id: speculation.id,
+      outreach_id: item.id,
+      opportunity_id: item.opportunity_id || null,
+      message_type: 'email',
+      tone: 'professional',
+      extra_context: [
+        item.reason_for_approach,
+        item.call_notes,
+        item.response_notes,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+
+      employer: {
+        company_name: item.employer_name || '',
+        contact_name: item.contact_name || '',
+        contact_title: item.contact_title || '',
+        email: item.contact_email || item.email || '',
+        website: item.website || '',
+        sector: item.sector || '',
+        region: item.region || '',
+      },
+
+      reason_for_approach: item.reason_for_approach || '',
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(data?.error || 'Could not generate speculative email draft.')
+    setDraftingEmployerOutreachId(null)
+    return
+  }
+
+  const draftText = [
+    data.subject ? `Subject: ${data.subject}` : '',
+    data.body || '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  setOutreachForm(current => ({
+    ...current,
+    source_type: item.lead_id ? 'lead' : item.client_id ? 'client' : 'manual',
+    linked_record_id: item.lead_id || item.client_id || '',
+
+    employer_name: item.employer_name || '',
+    contact_name: item.contact_name || '',
+    contact_title: item.contact_title || '',
+    contact_email: item.contact_email || item.email || '',
+    contact_phone: item.contact_phone || item.phone || '',
+    website: item.website || '',
+    sector: item.sector || '',
+    region: item.region || '',
+
+    outreach_direction: 'outbound',
+    outreach_type: 'email',
+    status: 'email_sent',
+    reason_for_approach:
+      data.reason_for_approach ||
+      item.reason_for_approach ||
+      current.reason_for_approach,
+    message_sent: draftText,
+    linkedin_message_sent: '',
+    call_notes: item.call_notes || '',
+    response_notes: item.response_notes || '',
+    follow_up_date: item.follow_up_date || '',
+  }))
+
+  setAiOutreachDraft({
+    subject: data.subject || '',
+    body: data.body || '',
+    linkedin_message: data.linkedin_message || '',
+  })
+
+  setDraftingEmployerOutreachId(null)
+
+  window.setTimeout(() => {
+    document
+      .getElementById('spec-add-employer-form')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 50)
 }
 
 function getEmployerLink(item: any) {
@@ -2006,7 +2159,7 @@ async function convertTargetToLead(targetId: string) {
     </div>
 
     {showAddEmployerForm && (
-      <div className="crm-card">
+  <div id="spec-add-employer-form" className="crm-card">
         <h2 className="crm-card-title" style={{ marginBottom: 6 }}>
           Add employer contact
         </h2>
@@ -2648,6 +2801,8 @@ async function convertTargetToLead(targetId: string) {
             const typeLabel =
               OUTREACH_TYPES.find(type => type.id === item.outreach_type)?.label ||
               String(item.outreach_type || 'email').replace(/_/g, ' ')
+            
+            const employerLink = getEmployerLink(item)
 
             return (
               <article
@@ -2669,16 +2824,64 @@ async function convertTargetToLead(targetId: string) {
                   }}
                 >
                   <div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 16,
-                        fontWeight: 900,
-                        color: 'var(--text-dark)',
-                      }}
-                    >
-                      {item.employer_name}
-                    </p>
+                   {employerLink ? (
+  <Link
+    href={employerLink}
+    style={{
+      display: 'inline-flex',
+      margin: 0,
+      fontSize: 16,
+      fontWeight: 900,
+      color: 'var(--primary)',
+      textDecoration: 'none',
+    }}
+  >
+    {item.employer_name} →
+  </Link>
+) : (
+  <button
+    type="button"
+    onClick={() => {
+      setShowAddEmployerForm(true)
+      setOutreachForm(current => ({
+        ...current,
+        source_type: 'manual',
+        linked_record_id: '',
+        employer_name: item.employer_name || '',
+        contact_name: item.contact_name || '',
+        contact_title: item.contact_title || '',
+        contact_email: item.contact_email || '',
+        contact_phone: item.contact_phone || '',
+        website: item.website || '',
+        sector: item.sector || '',
+        region: item.region || '',
+        outreach_direction: item.outreach_direction || 'outbound',
+        outreach_type: item.outreach_type || 'email',
+        status: item.status || 'not_contacted',
+        reason_for_approach: item.reason_for_approach || '',
+        message_sent: item.message_sent || '',
+        linkedin_message_sent: item.linkedin_message_sent || '',
+        call_notes: item.call_notes || '',
+        response_notes: item.response_notes || '',
+        follow_up_date: item.follow_up_date || '',
+      }))
+    }}
+    style={{
+      display: 'inline-flex',
+      margin: 0,
+      padding: 0,
+      border: 0,
+      background: 'transparent',
+      fontSize: 16,
+      fontWeight: 900,
+      color: 'var(--text-dark)',
+      cursor: 'pointer',
+      textAlign: 'left',
+    }}
+  >
+    {item.employer_name}
+  </button>
+)}
 
                     <p
                       style={{
@@ -2725,6 +2928,41 @@ async function convertTargetToLead(targetId: string) {
                     marginTop: 10,
                   }}
                 >
+                  <div
+  style={{
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 12,
+  }}
+>
+  <button
+    type="button"
+    className="crm-btn-ghost crm-btn-sm"
+    onClick={() => openEmployerActionForm(item, 'call')}
+  >
+    Log call
+  </button>
+
+  <button
+    type="button"
+    className="crm-btn-ghost crm-btn-sm"
+    onClick={() => openEmployerActionForm(item, 'note')}
+  >
+    Add note
+  </button>
+
+  <button
+    type="button"
+    className="crm-btn-ai crm-btn-sm"
+    onClick={() => draftSpeculativeEmailForEmployer(item)}
+    disabled={draftingEmployerOutreachId === item.id}
+  >
+    {draftingEmployerOutreachId === item.id
+      ? 'Drafting...'
+      : 'Draft spec email'}
+  </button>
+</div>
                   <span
                     className="crm-badge"
                     style={{
