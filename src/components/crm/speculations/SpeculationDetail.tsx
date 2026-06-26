@@ -152,6 +152,7 @@ const [candidateLocation, setCandidateLocation] = useState<{
 }))
 const [geocodingCandidate, setGeocodingCandidate] = useState(false)
 const [addingOutreach, setAddingOutreach] = useState(false)
+const [showAddEmployerForm, setShowAddEmployerForm] = useState(false)
 const [updatingOutreachId, setUpdatingOutreachId] = useState<string | null>(null)
 const [closingSpeculation, setClosingSpeculation] = useState(false)
 
@@ -489,6 +490,12 @@ function splitCommaList(value: string) {
     .split(',')
     .map(item => item.trim())
     .filter(Boolean)
+}
+
+function getEmployerLink(item: any) {
+  if (item.client_id) return `/crm/clients/${item.client_id}`
+  if (item.lead_id) return `/crm/leads/${item.lead_id}`
+  return null
 }
 
 function toNumber(value: unknown) {
@@ -1957,16 +1964,52 @@ async function convertTargetToLead(targetId: string) {
     {activeTab === 'targets' && (
   <div
     style={{
-      display: 'grid',
-      gridTemplateColumns: '420px 1fr',
+      display: 'flex',
+      flexDirection: 'column',
       gap: 16,
-      alignItems: 'start',
+      maxWidth: 1120,
+      margin: '0 auto',
     }}
   >
-    <div className="crm-card">
-      <h2 className="crm-card-title" style={{ marginBottom: 6 }}>
-        Add employer contact
-      </h2>
+    <div
+      className="crm-card"
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 14,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div>
+        <h2 className="crm-card-title">Employers contacted</h2>
+        <p
+          style={{
+            margin: 0,
+            marginTop: 4,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            lineHeight: 1.5,
+          }}
+        >
+          Track saved live jobs, employer approaches, messages, calls and follow-ups.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        className="crm-btn-primary crm-btn-sm"
+        onClick={() => setShowAddEmployerForm(current => !current)}
+      >
+        {showAddEmployerForm ? 'Hide form' : '+ Add employer contact'}
+      </button>
+    </div>
+
+    {showAddEmployerForm && (
+      <div className="crm-card">
+        <h2 className="crm-card-title" style={{ marginBottom: 6 }}>
+          Add employer contact
+        </h2>
 
       <p
         style={{
@@ -2542,7 +2585,7 @@ async function convertTargetToLead(targetId: string) {
           />
         </div>
 
-        <button
+                <button
           type="submit"
           className="crm-btn-primary"
           disabled={
@@ -2558,6 +2601,7 @@ async function convertTargetToLead(targetId: string) {
         </button>
       </form>
     </div>
+    )}
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="crm-card">
