@@ -2214,7 +2214,7 @@ Critical anonymity rules:
 - If a detail risks identifying the candidate, omit it.
 - Keep the candidate confidential until the employer confirms interest.
 
-Accuracy rules:
+Accuracy and evidence rules:
 - Do not invent facts.
 - Use only the data provided.
 - If something is unclear, omit it.
@@ -2222,6 +2222,12 @@ Accuracy rules:
 - Use credible language such as "could be worth a conversation", "appears relevant", "looks closely aligned", or "may be worth discussing".
 - If experience is transferable rather than direct, make that clear.
 - Do not overstate qualifications, standards, management experience or sector exposure.
+- Review the candidate CV, EA interview notes, candidate activity history, speculation notes and document summaries.
+- Prioritise EA interview notes and recruiter notes where they provide clearer evidence than the CV.
+- Compare the candidate directly against the saved job opportunity, match summary, advert text, job description and vacancy requirements where available.
+- Pull out the strongest 3-5 points that genuinely stand out against the role.
+- If there are gaps, caveats or things Joseph should check before sending, include them in fit_summary only. Do not make the email negative.
+- The email should sound like Joseph has genuinely reviewed the candidate against the vacancy, not like a generic mailshot.
 
 Tone:
 ${tone}
@@ -2243,10 +2249,10 @@ Return ONLY valid JSON in this exact shape:
   "body": "email body, or empty string for LinkedIn",
   "linkedin_message": "LinkedIn message, or empty string for email",
   "reason_for_approach": "short internal explanation of why this employer/job is being approached",
-  "fit_summary": "short internal candidate-to-job fit summary"
+  "fit_summary": "internal evidence summary with: strongest CV evidence, strongest EA interview/activity note evidence, direct match to the job description, and any gaps/caveats Joseph should check before sending"
 }
 
-Saved live job opportunity:
+Saved live job opportunity / job description:
 ${safeText(JSON.stringify({
   job_title: opportunity?.job_title,
   employer_name: opportunity?.employer_name,
@@ -2262,7 +2268,16 @@ ${safeText(JSON.stringify({
   match_summary: opportunity?.match_summary,
   concerns: opportunity?.concerns,
   notes: opportunity?.notes,
-}, null, 2), 8000)}
+  snippet: opportunity?.snippet,
+  description: opportunity?.description,
+  job_description: opportunity?.job_description,
+  advert_text: opportunity?.advert_text,
+  full_description: opportunity?.full_description,
+  requirements: opportunity?.requirements,
+  responsibilities: opportunity?.responsibilities,
+  essential_criteria: opportunity?.essential_criteria,
+  desirable_criteria: opportunity?.desirable_criteria,
+}, null, 2), 12000)}
 
 Existing employer / outreach record:
 ${safeText(JSON.stringify({
@@ -2287,6 +2302,9 @@ ${reasonForApproach || 'Not specified'}
 Extra recruiter context:
 ${extraContext || 'None'}
 
+Evidence to review before writing:
+Use the evidence below to decide what genuinely stands out against the role. Prioritise specific EA interview notes, recruiter notes, candidate activities and CV evidence over generic profile wording.
+
 Candidate anonymous/speculation profile:
 ${safeText(JSON.stringify({
   target_role: speculation.target_role,
@@ -2299,14 +2317,14 @@ ${safeText(JSON.stringify({
   key_selling_points: speculation.key_selling_points,
 }, null, 2), 10000)}
 
-Candidate notes, calls, interview notes and activity history:
-${safeText(JSON.stringify(candidateActivities ?? [], null, 2), 10000)}
+EA candidate interview notes / activity history:
+${safeText(JSON.stringify(candidateActivities ?? [], null, 2), 12000)}
 
 Candidate documents and document summaries:
-${safeText(JSON.stringify(candidateDocuments ?? [], null, 2), 8000)}
+${safeText(JSON.stringify(candidateDocuments ?? [], null, 2), 9000)}
 
 Speculation notes:
-${safeText(JSON.stringify(speculationNotesForPrompt ?? [], null, 2), 8000)}
+${safeText(JSON.stringify(speculationNotesForPrompt ?? [], null, 2), 9000)}
 
 Candidate record:
 ${safeText(JSON.stringify({
@@ -2326,7 +2344,13 @@ ${safeText(JSON.stringify({
 }, null, 2), 9000)}
 
 CV excerpt for context only — anonymise heavily and do not copy employer names:
-${safeText(candidate.formatted_cv, 5000)}
+${safeText(candidate.formatted_cv, 9000)}
+
+When writing:
+- Use the email body to sell the strongest relevant points only.
+- Use fit_summary to explain the evidence in more detail for Joseph.
+- In fit_summary, clearly separate CV evidence, EA interview/activity note evidence, job match, and any caveats.
+- Do not include caveats in the employer-facing email unless they are positive or neutral.
 `
 
   const { text } = await callAI(prompt, {
