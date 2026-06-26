@@ -194,6 +194,38 @@ const [aiOutreachDraft, setAiOutreachDraft] = useState<{
   linkedin_message: string
 } | null>(null)
 
+const [specEmailModal, setSpecEmailModal] = useState<{
+  open: boolean
+  loading: boolean
+  saving: boolean
+  outreach: any | null
+  subject: string
+  body: string
+  linkedin_message: string
+  reason_for_approach: string
+  fit_summary: string
+  save_email: boolean
+  save_linkedin: boolean
+  save_reason: boolean
+  log_to_employer_activity: boolean
+  set_email_sent: boolean
+}>({
+  open: false,
+  loading: false,
+  saving: false,
+  outreach: null,
+  subject: '',
+  body: '',
+  linkedin_message: '',
+  reason_for_approach: '',
+  fit_summary: '',
+  save_email: true,
+  save_linkedin: false,
+  save_reason: true,
+  log_to_employer_activity: true,
+  set_email_sent: false,
+})
+
 const [savingJobKey, setSavingJobKey] = useState<string | null>(null)
 
 const [convertingOpportunityId, setConvertingOpportunityId] =
@@ -551,9 +583,23 @@ async function draftSpeculativeEmailForEmployer(item: any) {
   }
 
   setDraftingEmployerOutreachId(item.id)
-  setShowAddEmployerForm(true)
-  setAiOutreachType('email')
-  setAiOutreachDraft(null)
+
+  setSpecEmailModal({
+    open: true,
+    loading: true,
+    saving: false,
+    outreach: item,
+    subject: '',
+    body: '',
+    linkedin_message: '',
+    reason_for_approach: item.reason_for_approach || '',
+    fit_summary: '',
+    save_email: true,
+    save_linkedin: false,
+    save_reason: true,
+    log_to_employer_activity: Boolean(item.lead_id || item.client_id),
+    set_email_sent: false,
+  })
 
   const res = await fetch('/api/crm/speculations', {
     method: 'PATCH',
@@ -565,6 +611,8 @@ async function draftSpeculativeEmailForEmployer(item: any) {
       opportunity_id: item.opportunity_id || null,
       message_type: 'email',
       tone: 'professional',
+      persist_draft: false,
+
       extra_context: [
         item.reason_for_approach,
         item.call_notes,
@@ -591,58 +639,103 @@ async function draftSpeculativeEmailForEmployer(item: any) {
 
   if (!res.ok) {
     alert(data?.error || 'Could not generate speculative email draft.')
+
+    setSpecEmailModal(current => ({
+      ...current,
+      loading: false,
+    }))
+
     setDraftingEmployerOutreachId(null)
     return
   }
 
-  const draftText = [
-    data.subject ? `Subject: ${data.subject}` : '',
-    data.body || '',
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-
-  setOutreachForm(current => ({
+  setSpecEmailModal(current => ({
     ...current,
-    source_type: item.lead_id ? 'lead' : item.client_id ? 'client' : 'manual',
-    linked_record_id: item.lead_id || item.client_id || '',
-
-    employer_name: item.employer_name || '',
-    contact_name: item.contact_name || '',
-    contact_title: item.contact_title || '',
-    contact_email: item.contact_email || item.email || '',
-    contact_phone: item.contact_phone || item.phone || '',
-    website: item.website || '',
-    sector: item.sector || '',
-    region: item.region || '',
-
-    outreach_direction: 'outbound',
-    outreach_type: 'email',
-    status: 'email_sent',
-    reason_for_approach:
-      data.reason_for_approach ||
-      item.reason_for_approach ||
-      current.reason_for_approach,
-    message_sent: draftText,
-    linkedin_message_sent: '',
-    call_notes: item.call_notes || '',
-    response_notes: item.response_notes || '',
-    follow_up_date: item.follow_up_date || '',
-  }))
-
-  setAiOutreachDraft({
+    loading: false,
     subject: data.subject || '',
     body: data.body || '',
     linkedin_message: data.linkedin_message || '',
-  })
+    reason_for_approach:
+      data.reason_for_approach ||
+      item.reason_for_approach ||
+      '',
+    fit_summary: data.fit_summary || '',
+  }))
 
   setDraftingEmployerOutreachId(null)
+}
 
-  window.setTimeout(() => {
-    document
-      .getElementById('spec-add-employer-form')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, 50)
+async function saveSpecEmailModal() {
+  if (!specEmailModal.outreach?.id) return
+
+  setSpecEmailModal(current => ({
+    ...current,
+    saving: true,
+  }))
+
+  const res = await fetch('/api/crm/speculations', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'save_generated_spec_outreach',
+      speculation_id: speculation.id,
+      outreach_id: specEmailModal.outreach.id,
+
+      subject: specEmailModal.subject,
+      email_body: specEmailModal.body,
+      linkedin_message: specEmailModal.linkedin_message,
+      reason_for_approach: specEmailModal.reason_for_approach,
+      fit_summary: specEmailModal.fit_summary,
+
+      save_email: specEmailModal.save_email,
+      save_linkedin: specEmailModal.save_linkedin,
+      save_reason: specEmailModal.save_reason,
+      log_to_employer_activity: specEmailModal.log_to_employer_activity,
+      set_email_sent: specEmailModal.set_email_sent,
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(data?.error || 'Could not save speculative email draft.')
+
+    setSpecEmailModal(current => ({
+      ...current,
+      saving: false,
+    }))
+
+    return
+  }
+
+  if (data.outreach) {
+    setSpecOutreach((current: any[]) =>
+      current.map((item: any) =>
+        item.id === data.outreach.id ? data.outreach : item,
+      ),
+    )
+  }
+
+  if (data.note) {
+    setSpeculationNotes(current => [data.note, ...current])
+  }
+
+  setSpecEmailModal({
+    open: false,
+    loading: false,
+    saving: false,
+    outreach: null,
+    subject: '',
+    body: '',
+    linkedin_message: '',
+    reason_for_approach: '',
+    fit_summary: '',
+    save_email: true,
+    save_linkedin: false,
+    save_reason: true,
+    log_to_employer_activity: true,
+    set_email_sent: false,
+  })
 }
 
 function getEmployerLink(item: any) {
@@ -4681,8 +4774,249 @@ const isDraftingOpportunity =
     </div>
   </div>
 )}
+
+      {specEmailModal.open && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <div
+            className="crm-card"
+            style={{
+              width: 'min(980px, 100%)',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 24px 70px rgba(15,23,42,0.28)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 14,
+                alignItems: 'flex-start',
+                marginBottom: 16,
+              }}
+            >
+              <div>
+                <h2 className="crm-card-title">AI speculative email draft</h2>
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {specEmailModal.outreach?.employer_name || 'Employer'} · Review,
+                  edit and choose what to save.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="crm-btn-ghost crm-btn-sm"
+                onClick={() =>
+                  setSpecEmailModal(current => ({
+                    ...current,
+                    open: false,
+                  }))
+                }
+                disabled={specEmailModal.saving}
+              >
+                Close
+              </button>
+            </div>
+
+            {specEmailModal.loading ? (
+              <div
+                style={{
+                  padding: 24,
+                  borderRadius: 14,
+                  background: 'var(--primary-light)',
+                  color: 'var(--primary)',
+                  fontWeight: 900,
+                }}
+              >
+                ✦ Drafting against the saved job, candidate CV, notes and activity...
+              </div>
+            ) : (
+              <>
+                <div className="crm-field" style={{ marginBottom: 12 }}>
+                  <label className="crm-label">Subject</label>
+                  <input
+                    className="crm-input"
+                    value={specEmailModal.subject}
+                    onChange={event =>
+                      setSpecEmailModal(current => ({
+                        ...current,
+                        subject: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="crm-field" style={{ marginBottom: 12 }}>
+                  <label className="crm-label">Email draft</label>
+                  <textarea
+                    className="crm-input"
+                    rows={12}
+                    value={specEmailModal.body}
+                    onChange={event =>
+                      setSpecEmailModal(current => ({
+                        ...current,
+                        body: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="crm-field" style={{ marginBottom: 12 }}>
+                  <label className="crm-label">LinkedIn version</label>
+                  <textarea
+                    className="crm-input"
+                    rows={5}
+                    value={specEmailModal.linkedin_message}
+                    onChange={event =>
+                      setSpecEmailModal(current => ({
+                        ...current,
+                        linkedin_message: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="crm-form-row">
+                  <div className="crm-field">
+                    <label className="crm-label">Reason for approach</label>
+                    <textarea
+                      className="crm-input"
+                      rows={4}
+                      value={specEmailModal.reason_for_approach}
+                      onChange={event =>
+                        setSpecEmailModal(current => ({
+                          ...current,
+                          reason_for_approach: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="crm-field">
+                    <label className="crm-label">Candidate/job fit summary</label>
+                    <textarea
+                      className="crm-input"
+                      rows={4}
+                      value={specEmailModal.fit_summary}
+                      onChange={event =>
+                        setSpecEmailModal(current => ({
+                          ...current,
+                          fit_summary: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: 14,
+                    borderRadius: 14,
+                    background: '#f8fafc',
+                    border: '1px solid var(--border-light)',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 10,
+                  }}
+                >
+                  {[
+                    ['save_email', 'Save email to employer record'],
+                    ['save_linkedin', 'Save LinkedIn message'],
+                    ['save_reason', 'Save reason for approach'],
+                    ['log_to_employer_activity', 'Log to lead/client activity notes'],
+                    ['set_email_sent', 'Set status to Email sent'],
+                  ].map(([key, label]) => (
+                    <label
+                      key={key}
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'center',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: 'var(--text-dark)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean((specEmailModal as any)[key])}
+                        onChange={event =>
+                          setSpecEmailModal(current => ({
+                            ...current,
+                            [key]: event.target.checked,
+                          }))
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    justifyContent: 'flex-end',
+                    marginTop: 16,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="crm-btn-ghost"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        [
+                          specEmailModal.subject
+                            ? `Subject: ${specEmailModal.subject}`
+                            : '',
+                          specEmailModal.body,
+                        ]
+                          .filter(Boolean)
+                          .join('\n\n'),
+                      )
+                    }
+                  >
+                    Copy email
+                  </button>
+
+                  <button
+                    type="button"
+                    className="crm-btn-primary"
+                    onClick={saveSpecEmailModal}
+                    disabled={specEmailModal.saving}
+                  >
+                    {specEmailModal.saving ? 'Saving...' : 'Save draft'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
+    </div>
+  )
+}
 
 function OutreachBox({
   title,

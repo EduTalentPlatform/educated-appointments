@@ -2164,11 +2164,38 @@ return NextResponse.json({ opportunity, outreach, note })
     cleanString(employer.name)
 
   const jobTitle =
-    cleanString(opportunity?.job_title) ||
-    cleanString(employer.job_title) ||
-    cleanString(speculation.target_role)
+  cleanString(opportunity?.job_title) ||
+  cleanString(employer.job_title) ||
+  cleanString(speculation.target_role)
 
-  const prompt = `
+const [
+  { data: candidateActivities },
+  { data: candidateDocuments },
+  { data: speculationNotesForPrompt },
+] = await Promise.all([
+  supabase
+    .from('candidate_activities')
+    .select('id, activity_type, content, created_at')
+    .eq('candidate_id', candidate.id)
+    .order('created_at', { ascending: false })
+    .limit(40),
+
+  supabase
+    .from('candidate_documents')
+    .select('id, name, doc_type, summary, details, created_at')
+    .eq('candidate_id', candidate.id)
+    .order('created_at', { ascending: false })
+    .limit(25),
+
+  supabase
+    .from('speculation_notes')
+    .select('id, note_type, content, created_at')
+    .eq('speculation_id', speculationId)
+    .order('created_at', { ascending: false })
+    .limit(40),
+])
+
+const prompt = `
 You are writing anonymous recruitment outreach for Educated Appointments, a specialist UK recruitment agency working across Further Education, Skills, Apprenticeships and Training.
 
 Task:
@@ -2271,6 +2298,15 @@ ${safeText(JSON.stringify({
   candidate_requirements: speculation.candidate_requirements,
   key_selling_points: speculation.key_selling_points,
 }, null, 2), 10000)}
+
+Candidate notes, calls, interview notes and activity history:
+${safeText(JSON.stringify(candidateActivities ?? [], null, 2), 10000)}
+
+Candidate documents and document summaries:
+${safeText(JSON.stringify(candidateDocuments ?? [], null, 2), 8000)}
+
+Speculation notes:
+${safeText(JSON.stringify(speculationNotesForPrompt ?? [], null, 2), 8000)}
 
 Candidate record:
 ${safeText(JSON.stringify({
@@ -2399,6 +2435,162 @@ Keep the tone human, credible, warm and recruitment-led.
     fit_summary: fitSummary || '',
     opportunity,
     outreach: updatedOutreach || outreach || null,
+  })
+}
+
+if (action === 'save_generated_spec_outreach') {
+  const speculationId = cleanString(body.speculation_id || body.speculationId)
+  const outreachId = cleanString(body.outreach_id || body.outreachId)
+
+  if (!speculationId || !outreachId) {
+    return NextResponse.json(
+      { error: 'Speculation ID and outreach ID are required.' },
+      { status: 400 },
+    )
+  }
+
+  const saveEmail = body.save_email !== false
+  const saveLinkedin = Boolean(body.save_linkedin)
+  const saveReason = body.save_reason !== false
+  const logToEmployerActivity = body.log_to_employer_activity !== false
+  const setEmailSent = Boolean(body.set_email_sent)
+
+  const subject = cleanString(body.subject)
+  const emailBody = cleanString(body.email_body || body.body)
+  const linkedinMessage = cleanString(body.linkedin_message)
+  const reasonForApproach = cleanString(body.reason_for_approach)
+  const fitSummary = cleanString(body.fit_summary)
+
+  const { data: existingOutreach, error: existingError } = await supabase
+    .from('speculation_outreach')
+    .select('*')
+    .eq('id', outreachId)
+    .eq('speculation_id', speculationId)
+    .single()
+
+  if (existingError || !existingOutreach) {
+    return NextResponse.json(
+      { error: existingError?.message || 'Outreach record not found.' },
+      { status: 404 },
+    )
+  }
+
+  const updatePayload: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  }
+
+  if (saveEmail && emailBody) {
+    updatePayload.message_sent = [
+      subject ? `Subject: ${subject}` : '',
+      emailBody,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+  }
+
+  if (saveLinkedin && linkedinMessage) {
+    updatePayload.linkedin_message_sent = linkedinMessage
+  }
+
+  if (saveReason && reasonForApproach) {
+    updatePayload.reason_for_approach = reasonForApproach
+  }
+
+  if (fitSummary) {
+    updatePayload.response_notes = [
+      existingOutreach.response_notes,
+      `AI fit summary:\n${fitSummary}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+  }
+
+  if (setEmailSent) {
+    updatePayload.status = 'email_sent'
+    updatePayload.outreach_type = 'email'
+    updatePayload.outreach_direction = 'outbound'
+    updatePayload.contacted_at =
+      existingOutreach.contacted_at || new Date().toISOString()
+  }
+
+  const { data: outreach, error: updateError } = await supabase
+    .from('speculation_outreach')
+    .update(updatePayload)
+    .eq('id', outreachId)
+    .eq('speculation_id', speculationId)
+    .select()
+    .single()
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 400 })
+  }
+
+  let linkedEmployerActivity: any = null
+
+  const activityType = setEmailSent ? 'email' : 'note'
+  const activityDirection = 'outbound'
+
+  const activityContent = [
+    'AI speculative email draft saved.',
+    outreach.employer_name ? `Employer: ${outreach.employer_name}` : '',
+    subject ? `Subject: ${subject}` : '',
+    reasonForApproach ? `Reason for approach:\n${reasonForApproach}` : '',
+    fitSummary ? `Candidate/job fit:\n${fitSummary}` : '',
+    saveEmail && emailBody ? `Email draft:\n${emailBody}` : '',
+    saveLinkedin && linkedinMessage
+      ? `LinkedIn draft:\n${linkedinMessage}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  if (logToEmployerActivity && outreach.lead_id) {
+    const { data: leadActivity } = await supabase
+      .from('lead_activities')
+      .insert({
+        lead_id: outreach.lead_id,
+        activity_type: activityType,
+        direction: activityDirection,
+        contact_id: null,
+        content: activityContent,
+        follow_up_date: outreach.follow_up_date || null,
+      })
+      .select()
+      .single()
+
+    linkedEmployerActivity = leadActivity
+  }
+
+  if (logToEmployerActivity && outreach.client_id) {
+    const { data: clientActivity } = await supabase
+      .from('client_activities')
+      .insert({
+        client_id: outreach.client_id,
+        activity_type: activityType,
+        direction: activityDirection,
+        content: activityContent,
+        follow_up_date: outreach.follow_up_date || null,
+      })
+      .select()
+      .single()
+
+    linkedEmployerActivity = clientActivity
+  }
+
+  const { data: note } = await supabase
+    .from('speculation_notes')
+    .insert({
+      speculation_id: speculationId,
+      note_type: 'note',
+      content: `AI speculative email draft saved for ${outreach.employer_name}.`,
+    })
+    .select()
+    .single()
+
+  return NextResponse.json({
+    outreach,
+    note,
+    linkedEmployerActivity,
   })
 }
     
