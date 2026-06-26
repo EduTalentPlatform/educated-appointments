@@ -21,8 +21,10 @@ function normalisePostcode(value: unknown) {
 
 function displayPostcode(value: unknown) {
   const normalised = normalisePostcode(value)
+
   if (!normalised) return ''
   if (normalised.length <= 3) return normalised
+
   return `${normalised.slice(0, -3)} ${normalised.slice(-3)}`
 }
 
@@ -61,26 +63,169 @@ function distanceMiles(
   return earthRadiusMiles * c
 }
 
-function textIncludesAny(source: string, terms: string[]) {
-  const haystack = source.toLowerCase()
-
-  return terms.some(term => haystack.includes(term.toLowerCase()))
-}
-
 function previewText(value: unknown, maxLength = 220) {
   const text = clean(value).replace(/\s+/g, ' ')
+
   if (!text) return ''
   if (text.length <= maxLength) return text
+
   return `${text.slice(0, maxLength).trimEnd()}…`
 }
 
 function firstClean(values: unknown[]) {
   for (const value of values) {
     const text = clean(value)
+
     if (text) return text
   }
 
   return ''
+}
+
+function normaliseRoleValue(value: unknown) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/\s+/g, ' ')
+}
+
+function splitStoredRoleValues(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>)
+  }
+
+  const text = clean(value)
+
+  if (!text) return []
+
+  return text
+    .split(/[,|;\n]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function fieldMatchesExactRole(value: unknown, selectedRole: string): boolean {
+  const selected = normaliseRoleValue(selectedRole)
+
+  if (!selected) return true
+
+  const storedValues = splitStoredRoleValues(value)
+
+  if (storedValues.length === 0) return false
+
+  return storedValues.some(item => {
+    if (Array.isArray(item) || (item && typeof item === 'object')) {
+      return fieldMatchesExactRole(item, selectedRole)
+    }
+
+    return normaliseRoleValue(item) === selected
+  })
+}
+
+function candidateMatchesExactRole({
+  candidate,
+  selectedMainRoleType,
+  selectedSpecificRole,
+}: {
+  candidate: any
+  selectedMainRoleType: string
+  selectedSpecificRole: string
+}) {
+  const mainRole = normaliseRoleValue(selectedMainRoleType)
+  const specificRole = normaliseRoleValue(selectedSpecificRole)
+
+  if (mainRole && normaliseRoleValue(candidate.main_role_type) !== mainRole) {
+    return false
+  }
+
+  if (!specificRole) return true
+
+  return [
+    candidate.sub_role_type,
+    candidate.seeking_role_type,
+    candidate.looking_for_roles,
+  ].some(value => fieldMatchesExactRole(value, selectedSpecificRole))
+}
+
+function splitLooseTerms(value: unknown) {
+  return String(value || '')
+    .split(/[,|\n]/)
+    .map(term => term.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function candidateMatchesStandard(candidate: any, standardQuery: string) {
+  const standardTerms = splitLooseTerms(standardQuery)
+
+  if (standardTerms.length === 0) return true
+
+  const standardText = [
+    candidate.can_deliver,
+    candidate.qualifications,
+    candidate.notes,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return standardTerms.some(term => standardText.includes(term))
+}
+
+function candidateMatchesKeyword(candidate: any, keywordQuery: string) {
+  const keywordTerms = splitLooseTerms(keywordQuery)
+
+  if (keywordTerms.length === 0) return true
+
+  const fullText = [
+    candidate.job_title,
+    candidate.main_role_type,
+    candidate.sub_role_type,
+    candidate.seeking_role_type,
+    Array.isArray(candidate.looking_for_roles)
+      ? candidate.looking_for_roles.join(' ')
+      : candidate.looking_for_roles,
+    candidate.can_deliver,
+    candidate.qualifications,
+    candidate.notes,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return keywordTerms.some(term => fullText.includes(term))
+}
+
+function candidateMatchesSelectedSearch({
+  candidate,
+  searchMode,
+  selectedMainRoleType,
+  selectedSpecificRole,
+  standardQuery,
+  keywordQuery,
+}: {
+  candidate: any
+  searchMode: string
+  selectedMainRoleType: string
+  selectedSpecificRole: string
+  standardQuery: string
+  keywordQuery: string
+}) {
+  const roleMatches = candidateMatchesExactRole({
+    candidate,
+    selectedMainRoleType,
+    selectedSpecificRole,
+  })
+
+  const standardMatches = candidateMatchesStandard(candidate, standardQuery)
+  const keywordMatches = candidateMatchesKeyword(candidate, keywordQuery)
+
+  if (searchMode === 'role') return roleMatches
+  if (searchMode === 'standard') return standardMatches
+  if (searchMode === 'keyword') return keywordMatches
+
+  return roleMatches && standardMatches
 }
 
 type RecentCandidateNote = {
@@ -179,6 +324,7 @@ async function getRecentCandidateNotesMap(
     } else {
       for (const row of activityRows || []) {
         const note = normaliseCandidateActivity(row)
+
         if (!note) continue
 
         const existing = notesByCandidateId.get(note.candidate_id) || []
@@ -204,148 +350,6 @@ async function getRecentCandidateNotesMap(
   }
 
   return notesByCandidateId
-}
-
-function buildCandidateSearchText(candidate: any) {
-  return [
-    candidate.first_name,
-    candidate.last_name,
-    candidate.job_title,
-    candidate.main_role_type,
-    candidate.sub_role_type,
-    candidate.seeking_role_type,
-    Array.isArray(candidate.looking_for_roles)
-      ? candidate.looking_for_roles.join(' ')
-      : candidate.looking_for_roles,
-    candidate.notes,
-    candidate.qualifications,
-    candidate.can_deliver,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-}
-
-function buildRoleTerms(roleType: unknown, vacancy: any) {
-  const raw = [
-    roleType,
-    vacancy?.sector,
-    vacancy?.role_type,
-    vacancy?.title,
-    vacancy?.subject_area,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  const terms = new Set<string>()
-
-  if (raw.includes('quality manager')) {
-    terms.add('quality manager')
-    terms.add('quality')
-  }
-
-  if (raw.includes('quality')) terms.add('quality')
-  if (raw.includes('manager')) terms.add('manager')
-  if (raw.includes('tutor')) terms.add('tutor')
-  if (raw.includes('trainer')) terms.add('trainer')
-  if (raw.includes('assessor')) terms.add('assessor')
-  if (raw.includes('skills coach')) terms.add('skills coach')
-  if (raw.includes('iqa')) terms.add('iqa')
-  if (raw.includes('lead iqa')) terms.add('lead iqa')
-  if (raw.includes('operations')) terms.add('operations')
-  if (raw.includes('bdm')) terms.add('bdm')
-  if (raw.includes('business development')) terms.add('business development')
-  if (raw.includes('employer engagement')) terms.add('employer engagement')
-
-  if (terms.size === 0 && clean(roleType)) {
-    terms.add(clean(roleType))
-  }
-
-  if (terms.size === 0 && clean(vacancy?.title)) {
-    terms.add(clean(vacancy.title))
-  }
-
-  return Array.from(terms).filter(Boolean)
-}
-
-function candidateMatchesRole(candidate: any, terms: string[]) {
-  if (terms.length === 0) return true
-
-  const candidateText = buildCandidateSearchText(candidate)
-
-  return textIncludesAny(candidateText, terms)
-}
-
-function splitSearchTerms(value: unknown) {
-  return String(value || '')
-    .split(/[,|\n]/)
-    .map(term => term.trim().toLowerCase())
-    .filter(Boolean)
-}
-
-function includesTerm(text: string, term: string) {
-  return text.toLowerCase().includes(term.toLowerCase())
-}
-
-function candidateMatchesSelectedSearch({
-  candidate,
-  searchMode,
-  roleQuery,
-  standardQuery,
-  keywordQuery,
-}: {
-  candidate: any
-  searchMode: string
-  roleQuery: string
-  standardQuery: string
-  keywordQuery: string
-}) {
-  const roleTerms = splitSearchTerms(roleQuery)
-  const standardTerms = splitSearchTerms(standardQuery)
-  const keywordTerms = splitSearchTerms(keywordQuery)
-
-  const roleText = [
-    candidate.job_title,
-    candidate.main_role_type,
-    candidate.sub_role_type,
-    candidate.seeking_role_type,
-    Array.isArray(candidate.looking_for_roles)
-      ? candidate.looking_for_roles.join(' ')
-      : candidate.looking_for_roles,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  const standardText = [
-    candidate.can_deliver,
-    candidate.qualifications,
-    candidate.notes,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  const fullText = `${roleText} ${standardText}`
-
-  const roleMatches =
-    roleTerms.length === 0 ||
-    roleTerms.some(term => includesTerm(roleText, term))
-
-  const standardMatches =
-    standardTerms.length === 0 ||
-    standardTerms.some(term => includesTerm(standardText, term))
-
-  const keywordMatches =
-    keywordTerms.length === 0 ||
-    keywordTerms.some(term => includesTerm(fullText, term))
-
-  if (searchMode === 'role') return roleMatches
-  if (searchMode === 'standard') return standardMatches
-  if (searchMode === 'keyword') return keywordMatches
-
-  return roleMatches && standardMatches
 }
 
 async function getOrCreatePostcodeGeocode(
@@ -419,7 +423,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const searchMode = String(body.searchMode || 'role_standard')
-    const roleQuery = clean(body.roleQuery || body.roleType || '')
+
+    const selectedMainRoleType = clean(
+      body.mainRoleType ||
+        body.main_role_type ||
+        body.roleMainType ||
+        body.role_main_type ||
+        '',
+    )
+
+    const selectedSpecificRole = clean(
+      body.specificRole ||
+        body.specific_role ||
+        body.subRoleType ||
+        body.sub_role_type ||
+        body.roleQuery ||
+        body.roleType ||
+        '',
+    )
+
+    const roleQuery = selectedSpecificRole
     const standardQuery = clean(body.standardQuery || '')
     const keywordQuery = clean(body.keywordQuery || '')
 
@@ -454,10 +477,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       if (error) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400 },
-        )
+        return NextResponse.json({ error: error.message }, { status: 400 })
       }
 
       vacancy = data
@@ -494,8 +514,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const roleTerms = buildRoleTerms(roleQuery, vacancy)
-
     const { data: candidates, error: candidatesError } = await supabase
       .from('candidates')
       .select(`
@@ -514,8 +532,10 @@ export async function POST(request: NextRequest) {
         qualifications,
         can_deliver,
         actively_looking,
+        status,
         created_at
       `)
+      .or('status.in.(active,passive),status.is.null,actively_looking.eq.true')
       .order('created_at', { ascending: false })
       .limit(2000)
 
@@ -530,7 +550,8 @@ export async function POST(request: NextRequest) {
       candidateMatchesSelectedSearch({
         candidate,
         searchMode,
-        roleQuery,
+        selectedMainRoleType,
+        selectedSpecificRole,
         standardQuery,
         keywordQuery,
       }),
@@ -559,10 +580,7 @@ export async function POST(request: NextRequest) {
     const applicationByCandidateId = new Map(
       (existingApplications || [])
         .filter((application: any) => application.candidate_id)
-        .map((application: any) => [
-          application.candidate_id,
-          application,
-        ]),
+        .map((application: any) => [application.candidate_id, application]),
     )
 
     const candidatePostcodeNorms = Array.from(
@@ -573,7 +591,7 @@ export async function POST(request: NextRequest) {
       ),
     )
 
-    const { data: geocodes, error: geocodeError } =
+    const { data: cachedGeocodes, error: geocodeError } =
       candidatePostcodeNorms.length > 0
         ? await supabase
             .from('postcode_geocodes')
@@ -589,8 +607,26 @@ export async function POST(request: NextRequest) {
     }
 
     const geocodeMap = new Map(
-      (geocodes || []).map(row => [row.postcode_norm, row]),
+      (cachedGeocodes || []).map(row => [row.postcode_norm, row]),
     )
+
+    const missingPostcodeNorms = candidatePostcodeNorms.filter(
+      postcodeNorm => !geocodeMap.has(postcodeNorm),
+    )
+
+    if (missingPostcodeNorms.length > 0) {
+      const newlyGeocoded = await Promise.all(
+        missingPostcodeNorms.map(postcodeNorm =>
+          getOrCreatePostcodeGeocode(supabase, postcodeNorm),
+        ),
+      )
+
+      for (const geo of newlyGeocoded) {
+        if (geo?.postcode_norm) {
+          geocodeMap.set(geo.postcode_norm, geo)
+        }
+      }
+    }
 
     const results = roleMatched
       .map(candidate => {
@@ -621,8 +657,12 @@ export async function POST(request: NextRequest) {
 
         return {
           ...candidate,
-          name: `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),
-          candidate_name: `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),
+          name: `${candidate.first_name || ''} ${
+            candidate.last_name || ''
+          }`.trim(),
+          candidate_name: `${candidate.first_name || ''} ${
+            candidate.last_name || ''
+          }`.trim(),
           postcode: candidate.postcode,
           postcode_geocoded: Boolean(geo),
           distance_miles:
@@ -640,13 +680,14 @@ export async function POST(request: NextRequest) {
 
           match_reasons: [
             searchMode === 'role_standard'
-              ? `Matched role + standard`
+              ? 'Matched role + standard'
               : searchMode === 'standard'
-                ? `Matched standard`
+                ? 'Matched standard'
                 : searchMode === 'keyword'
-                  ? `Matched keyword`
-                  : `Matched role`,
-            roleQuery ? `Role: ${roleQuery}` : '',
+                  ? 'Matched keyword'
+                  : 'Matched role',
+            selectedMainRoleType ? `Main role: ${selectedMainRoleType}` : '',
+            selectedSpecificRole ? `Specific role: ${selectedSpecificRole}` : '',
             standardQuery ? `Standard: ${standardQuery}` : '',
             keywordQuery ? `Keyword: ${keywordQuery}` : '',
             distance !== null
@@ -663,9 +704,7 @@ export async function POST(request: NextRequest) {
       .filter(candidate => {
         if (workType === 'remote') return true
 
-        if (workType === 'hybrid') {
-          return true
-        }
+        if (workType === 'hybrid') return true
 
         return (
           candidate.distance_miles !== null &&
@@ -687,7 +726,8 @@ export async function POST(request: NextRequest) {
         vacancy_has_coordinates: Boolean(vacancyGeo),
         work_type: workType,
         radius,
-        role_terms: roleTerms,
+        selected_main_role_type: selectedMainRoleType || null,
+        selected_specific_role: selectedSpecificRole || null,
         role_matched_before_radius: roleMatched.length,
         candidates_with_postcode_geocode: results.filter(
           candidate => candidate.postcode_geocoded,

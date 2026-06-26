@@ -1117,6 +1117,12 @@ setAdding(false)
   radius,
 
   searchMode: matchMode,
+
+  // Structured role matching
+  mainRoleType: matchMainRoleType,
+  specificRole: matchRoleQuery,
+
+  // Keep these for existing standard / keyword modes
   roleQuery: matchRoleQuery,
   standardQuery: matchStandardQuery,
   keywordQuery: matchKeywordQuery,
