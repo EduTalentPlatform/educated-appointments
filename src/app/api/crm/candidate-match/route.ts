@@ -136,17 +136,23 @@ function candidateMatchesExactRole({
   const mainRole = normaliseRoleValue(selectedMainRoleType)
   const specificRole = normaliseRoleValue(selectedSpecificRole)
 
-  if (mainRole && normaliseRoleValue(candidate.main_role_type) !== mainRole) {
-    return false
+  // If a specific role is selected, that is the main match.
+  // Example: Business Development Manager should find candidates labelled BDM,
+  // even if their main_role_type is missing, old, or slightly different.
+  if (specificRole) {
+    return [
+      candidate.sub_role_type,
+      candidate.seeking_role_type,
+      candidate.looking_for_roles,
+    ].some(value => fieldMatchesExactRole(value, selectedSpecificRole))
   }
 
-  if (!specificRole) return true
+  // If no specific role is selected, fall back to the main role category.
+  if (mainRole) {
+    return normaliseRoleValue(candidate.main_role_type) === mainRole
+  }
 
-  return [
-    candidate.sub_role_type,
-    candidate.seeking_role_type,
-    candidate.looking_for_roles,
-  ].some(value => fieldMatchesExactRole(value, selectedSpecificRole))
+  return true
 }
 
 function splitLooseTerms(value: unknown) {
@@ -418,6 +424,59 @@ async function getOrCreatePostcodeGeocode(
   return row
 }
 
+const CANDIDATE_MATCH_SELECT = `
+  id,
+  first_name,
+  last_name,
+  email,
+  phone,
+  job_title,
+  main_role_type,
+  sub_role_type,
+  seeking_role_type,
+  looking_for_roles,
+  postcode,
+  notes,
+  qualifications,
+  can_deliver,
+  actively_looking,
+  status,
+  created_at
+`
+
+async function fetchCandidatePool(
+  supabase: ReturnType<typeof getServiceClient>,
+) {
+  const allCandidates: any[] = []
+  const pageSize = 1000
+  let from = 0
+
+  while (true) {
+    const to = from + pageSize - 1
+
+    const { data, error } = await supabase
+      .from('candidates')
+      .select(CANDIDATE_MATCH_SELECT)
+      .or('status.in.(active,passive),status.is.null,actively_looking.eq.true')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const rows = data || []
+
+    allCandidates.push(...rows)
+
+    if (rows.length < pageSize) break
+
+    from += pageSize
+  }
+
+  return allCandidates
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -514,37 +573,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: candidates, error: candidatesError } = await supabase
-      .from('candidates')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        phone,
-        job_title,
-        main_role_type,
-        sub_role_type,
-        seeking_role_type,
-        looking_for_roles,
-        postcode,
-        notes,
-        qualifications,
-        can_deliver,
-        actively_looking,
-        status,
-        created_at
-      `)
-      .or('status.in.(active,passive),status.is.null,actively_looking.eq.true')
-      .order('created_at', { ascending: false })
-      .limit(2000)
-
-    if (candidatesError) {
-      return NextResponse.json(
-        { error: candidatesError.message },
-        { status: 400 },
-      )
-    }
+    const candidates = await fetchCandidatePool(supabase)
 
     const roleMatched = (candidates || []).filter(candidate =>
       candidateMatchesSelectedSearch({
