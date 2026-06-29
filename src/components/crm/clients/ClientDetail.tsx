@@ -199,7 +199,13 @@ export default function ClientDetail({
   const supabase = createClient()
 
   const [client, setClient] = useState(initialClient)
-  const [vacancies, setVacancies] = useState(initialVacancies)
+const [editingClientName, setEditingClientName] = useState(false)
+const [clientNameForm, setClientNameForm] = useState(
+  initialClient.company_name ?? '',
+)
+const [savingClientName, setSavingClientName] = useState(false)
+
+const [vacancies, setVacancies] = useState(initialVacancies)
   const [contacts, setContacts] = useState(initialContacts)
   const [sites, setSites] = useState(initialSites)
 const [activities, setActivities] = useState(initialActivities)
@@ -335,7 +341,51 @@ function resetBdForm() {
   (sum, v) => sum + (v.applications?.length ?? 0),
   0,
 )
+
 const placedCount = placements.length
+
+async function saveClientName(event?: React.FormEvent) {
+  event?.preventDefault()
+
+  const nextName = clientNameForm.trim()
+
+  if (!nextName) {
+    alert('Client name is required.')
+    return
+  }
+
+  setSavingClientName(true)
+
+  const { data, error } = await supabase
+    .from('clients')
+    .update({
+      company_name: nextName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', client.id)
+    .select('*')
+    .single()
+
+  if (error) {
+    alert(error.message || 'Could not update client name.')
+    setSavingClientName(false)
+    return
+  }
+
+  if (data) {
+    setClient(data)
+    setClientNameForm(data.company_name ?? nextName)
+  } else {
+    setClient(current => ({
+      ...current,
+      company_name: nextName,
+    }))
+  }
+
+  setEditingClientName(false)
+  setSavingClientName(false)
+  router.refresh()
+}
 
   // Fee calculation
   function calcFee(v: Vacancy) {
@@ -783,7 +833,73 @@ async function deleteSite(id: string) {
             <span>/</span><span>{client.company_name}</span>
           </div>
           <div className="crm-lead-header-title">
-            <h1 className="crm-page-title">{client.company_name}</h1>
+            {editingClientName ? (
+  <form
+    onSubmit={saveClientName}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    }}
+  >
+    <input
+      className="crm-input"
+      value={clientNameForm}
+      onChange={event => setClientNameForm(event.target.value)}
+      autoFocus
+      style={{
+        minWidth: 280,
+        maxWidth: 420,
+        height: 38,
+        fontSize: 18,
+        fontWeight: 900,
+      }}
+    />
+
+    <button
+      type="submit"
+      className="crm-btn-primary crm-btn-sm"
+      disabled={savingClientName}
+    >
+      {savingClientName ? 'Saving...' : 'Save'}
+    </button>
+
+    <button
+      type="button"
+      className="crm-btn-ghost crm-btn-sm"
+      onClick={() => {
+        setClientNameForm(client.company_name ?? '')
+        setEditingClientName(false)
+      }}
+      disabled={savingClientName}
+    >
+      Cancel
+    </button>
+  </form>
+) : (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    }}
+  >
+    <h1 className="crm-page-title">{client.company_name}</h1>
+
+    <button
+      type="button"
+      className="crm-btn-ghost crm-btn-sm"
+      onClick={() => {
+        setClientNameForm(client.company_name ?? '')
+        setEditingClientName(true)
+      }}
+    >
+      Edit name
+    </button>
+  </div>
+)}
             {health && (
               <span className="crm-badge" style={{ background: HEALTH_COLOURS[health]?.bg, color: HEALTH_COLOURS[health]?.text }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: HEALTH_COLOURS[health]?.dot, display: 'inline-block', marginRight: 5 }} />
