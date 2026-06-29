@@ -406,16 +406,26 @@ function buildTobDocumentHtml({
       background: #fbfbff;
     }
 
-    .signature-line {
-      margin-bottom: 14px;
-      font-size: 10.5px;
-    }
+    .signature-row {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #d8d7ff;
+}
 
-    .signature-anchor {
-      color: #fbfbff;
-      font-size: 1px;
-      line-height: 1px;
-    }
+.signature-label {
+  width: 90px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #17172f;
+}
+
+.signature-anchor {
+  color: #fbfbff;
+  font-size: 1px;
+  line-height: 1px;
+}
 
     .footer {
       margin-top: 26px;
@@ -460,12 +470,25 @@ function buildTobDocumentHtml({
       <div class="signature-box">
         <p><strong>For and on behalf of ${escapeHtml(clientName)}</strong></p>
 
-        <p class="signature-line">Signature:</p>
-        <p class="signature-anchor">/sn1/</p>
+<div class="signature-row">
+  <span class="signature-label">Signature:</span>
+  <span class="signature-anchor">/sn1/</span>
+</div>
 
-        <p class="signature-line">Name:</p>
-        <p class="signature-line">Position:</p>
-        <p class="signature-line">Date:</p>
+<div class="signature-row">
+  <span class="signature-label">Name:</span>
+  <span class="signature-anchor">/name1/</span>
+</div>
+
+<div class="signature-row">
+  <span class="signature-label">Position:</span>
+  <span class="signature-anchor">/title1/</span>
+</div>
+
+<div class="signature-row">
+  <span class="signature-label">Date:</span>
+  <span class="signature-anchor">/date1/</span>
+</div>
       </div>
     </div>
 
@@ -572,16 +595,44 @@ Educated Appointments`,
             recipientId: '1',
             routingOrder: '1',
             tabs: {
-              signHereTabs: [
-                {
-                  anchorString: '/sn1/',
-                  anchorUnits: 'pixels',
-                  anchorXOffset: '20',
-                  anchorYOffset: '10',
-                  anchorIgnoreIfNotPresent: 'false',
-                },
-              ],
-            },
+  signHereTabs: [
+    {
+      anchorString: '/sn1/',
+      anchorUnits: 'pixels',
+      anchorXOffset: '10',
+      anchorYOffset: '-8',
+      anchorIgnoreIfNotPresent: 'false',
+    },
+  ],
+  fullNameTabs: [
+    {
+      anchorString: '/name1/',
+      anchorUnits: 'pixels',
+      anchorXOffset: '10',
+      anchorYOffset: '-8',
+      anchorIgnoreIfNotPresent: 'false',
+    },
+  ],
+  titleTabs: [
+    {
+      anchorString: '/title1/',
+      anchorUnits: 'pixels',
+      anchorXOffset: '10',
+      anchorYOffset: '-8',
+      anchorIgnoreIfNotPresent: 'false',
+      required: 'true',
+    },
+  ],
+  dateSignedTabs: [
+    {
+      anchorString: '/date1/',
+      anchorUnits: 'pixels',
+      anchorXOffset: '10',
+      anchorYOffset: '-8',
+      anchorIgnoreIfNotPresent: 'false',
+    },
+  ],
+},
           },
         ],
       },
