@@ -307,8 +307,17 @@ const [siteForm, setSiteForm] = useState({
   const [savingTerms, setSavingTerms] = useState(false)
   const [termsSaved, setTermsSaved] = useState(false)
   const [generatingTob, setGeneratingTob] = useState(false)
-  const [generatedTob, setGeneratedTob] = useState<string|null>(null)
-  const [tobError, setTobError] = useState<string|null>(null)
+const [generatedTob, setGeneratedTob] = useState<string | null>(null)
+const [tobError, setTobError] = useState<string | null>(null)
+const [sendingTobDocusign, setSendingTobDocusign] = useState(false)
+const [tobDocusignMessage, setTobDocusignMessage] = useState<string | null>(null)
+const [selectedTobContactId, setSelectedTobContactId] = useState(() => {
+  return (
+    initialContacts.find(contact => contact.is_primary && contact.email)?.id ||
+    initialContacts.find(contact => contact.email)?.id ||
+    ''
+  )
+})
 
   // Relationship
   const [health, setHealth] = useState(client.relationship_health ?? 'warm')
@@ -316,6 +325,11 @@ const [siteForm, setSiteForm] = useState({
   const [nextReview, setNextReview] = useState(client.next_review_date ?? '')
 
   const primaryContact = contacts.find(c => c.is_primary) ?? contacts[0]
+  const selectedTobContact =
+  contacts.find(contact => contact.id === selectedTobContactId) ||
+  contacts.find(contact => contact.is_primary && contact.email) ||
+  contacts.find(contact => contact.email) ||
+  null
   const actIcon = (type: string) =>
   ACTIVITY_TYPES.find(activity => activity.id === type)?.icon ?? '📝'
 
@@ -816,6 +830,61 @@ async function deleteSite(id: string) {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  async function sendTobViaDocusign() {
+  if (!generatedTob) {
+    setTobError('Generate the Terms of Business before sending via DocuSign.')
+    return
+  }
+
+  if (!selectedTobContact?.email) {
+    setTobError('Choose a client contact with an email address before sending.')
+    return
+  }
+
+  setSendingTobDocusign(true)
+  setTobError(null)
+  setTobDocusignMessage(null)
+
+  const res = await fetch('/api/crm/docusign/send-tob', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: client.id,
+      signer_name: selectedTobContact.name,
+      signer_email: selectedTobContact.email,
+      tob_text: generatedTob,
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    setTobError(data?.error || 'Could not send Terms of Business via DocuSign.')
+    setSendingTobDocusign(false)
+    return
+  }
+
+  setTobDocusignMessage(
+    data?.message ||
+      `Terms of Business sent to ${selectedTobContact.email} via DocuSign.`,
+  )
+
+  setClient(current => ({
+    ...current,
+    docusign_tob_envelope_id: data?.envelopeId ?? null,
+    docusign_tob_status: data?.status ?? 'sent',
+    docusign_tob_sent_at: new Date().toISOString(),
+    tob_signed: false,
+  } as any))
+
+  setTerms(current => ({
+    ...current,
+    tob_signed: false,
+  }))
+
+  setSendingTobDocusign(false)
+}
 
   const statusBadge: Record<string, { bg: string; text: string }> = {
     live: { bg: '#e8f5e8', text: '#217822' },
@@ -2162,25 +2231,102 @@ async function deleteSite(id: string) {
             </button>
 
             {generatedTob && (
-              <div style={{ marginTop: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)' }}>✦ Generated TOB — review before sending</p>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="crm-btn-ghost crm-btn-sm" onClick={downloadTob}>↓ Download</button>
-                  </div>
-                </div>
-                <textarea
-                  className="crm-input"
-                  rows={24}
-                  value={generatedTob}
-                  onChange={e => setGeneratedTob(e.target.value)}
-                  style={{ lineHeight: 1.7, fontFamily: 'inherit', fontSize: 12 }}
-                />
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.6 }}>
-                  Review carefully before sending. Download as .txt, then paste into Word or Google Docs to format and add your letterhead. DocuSign integration coming soon.
-                </p>
-              </div>
-            )}
+  <div style={{ marginTop: 20 }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 12,
+        flexWrap: 'wrap',
+      }}
+    >
+      <p
+        style={{
+          fontSize: 13,
+          fontWeight: 800,
+          color: 'var(--primary)',
+        }}
+      >
+        ✦ Generated TOB — review before sending
+      </p>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="crm-btn-ghost crm-btn-sm"
+          onClick={downloadTob}
+        >
+          ↓ Download
+        </button>
+
+        <button
+          type="button"
+          className="crm-btn-primary crm-btn-sm"
+          onClick={sendTobViaDocusign}
+          disabled={sendingTobDocusign}
+        >
+          {sendingTobDocusign ? 'Sending...' : 'Send via DocuSign'}
+        </button>
+      </div>
+    </div>
+
+    <div className="crm-field" style={{ marginBottom: 12 }}>
+      <label className="crm-label">Send DocuSign to</label>
+      <select
+        className="crm-select"
+        value={selectedTobContactId}
+        onChange={event => setSelectedTobContactId(event.target.value)}
+      >
+        <option value="">Select signer...</option>
+        {contacts
+          .filter(contact => contact.email)
+          .map(contact => (
+            <option key={contact.id} value={contact.id}>
+              {contact.name} — {contact.email}
+            </option>
+          ))}
+      </select>
+    </div>
+
+    {tobDocusignMessage && (
+      <p
+        style={{
+          fontSize: 12,
+          color: '#217822',
+          fontWeight: 700,
+          marginBottom: 10,
+        }}
+      >
+        ✓ {tobDocusignMessage}
+      </p>
+    )}
+
+    <textarea
+      className="crm-input"
+      rows={24}
+      value={generatedTob}
+      onChange={e => setGeneratedTob(e.target.value)}
+      style={{
+        lineHeight: 1.7,
+        fontFamily: 'inherit',
+        fontSize: 12,
+      }}
+    />
+
+    <p
+      style={{
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        marginTop: 8,
+        lineHeight: 1.6,
+      }}
+    >
+      Review carefully before sending. This will send the current version of the Terms of Business to the selected contact via DocuSign.
+    </p>
+  </div>
+)}
           </div>
         </div>
       )}
