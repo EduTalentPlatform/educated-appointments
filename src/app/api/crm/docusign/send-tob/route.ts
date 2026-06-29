@@ -112,30 +112,369 @@ async function getDocuSignAccessToken() {
   return String(json.access_token)
 }
 
-function buildTobDocumentText({
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function stripExistingSignatureSection(value: string) {
+  return value
+    .replace(/#\s*SIGNATURE AND ACCEPTANCE[\s\S]*$/i, '')
+    .replace(/SIGNED FOR AND ON BEHALF[\s\S]*$/i, '')
+    .trim()
+}
+
+function formatTermsBodyHtml(rawText: string) {
+  const cleanText = stripExistingSignatureSection(rawText)
+  const lines = cleanText.split('\n')
+  const html: string[] = []
+  let tableRows: string[][] = []
+
+  function flushTable() {
+    if (tableRows.length === 0) return
+
+    html.push('<table class="refund-table">')
+
+    tableRows.forEach((row, index) => {
+      if (row.every(cell => /^-+$/.test(cell.replace(/\s/g, '')))) return
+
+      const tag = index === 0 ? 'th' : 'td'
+
+      html.push('<tr>')
+      row.forEach(cell => {
+        html.push(`<${tag}>${formatInlineHtml(cell)}</${tag}>`)
+      })
+      html.push('</tr>')
+    })
+
+    html.push('</table>')
+    tableRows = []
+  }
+
+  function formatInlineHtml(value: string) {
+    let output = escapeHtml(value.trim())
+
+    output = output.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    output = output.replace(/\*(.*?)\*/g, '<em>$1</em>')
+
+    return output
+  }
+
+  lines.forEach(line => {
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      flushTable()
+      return
+    }
+
+    if (trimmed === '---') {
+      flushTable()
+      return
+    }
+
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const cells = trimmed
+        .split('|')
+        .slice(1, -1)
+        .map(cell => cell.trim())
+
+      tableRows.push(cells)
+      return
+    }
+
+    flushTable()
+
+    if (trimmed.startsWith('# ')) {
+      html.push(`<h1>${formatInlineHtml(trimmed.replace(/^#\s+/, ''))}</h1>`)
+      return
+    }
+
+    if (trimmed.startsWith('## ')) {
+      html.push(`<h2>${formatInlineHtml(trimmed.replace(/^##\s+/, ''))}</h2>`)
+      return
+    }
+
+    if (/^\d+\.\s+[A-Z]/.test(trimmed)) {
+      html.push(`<h2>${formatInlineHtml(trimmed)}</h2>`)
+      return
+    }
+
+    if (/^\*\*\d+\.\d+/.test(trimmed)) {
+      html.push(`<p class="clause">${formatInlineHtml(trimmed)}</p>`)
+      return
+    }
+
+    if (trimmed.startsWith('>')) {
+      html.push(
+        `<p class="sub-clause">${formatInlineHtml(
+          trimmed.replace(/^>\s*/, ''),
+        )}</p>`,
+      )
+      return
+    }
+
+    html.push(`<p>${formatInlineHtml(trimmed)}</p>`)
+  })
+
+  flushTable()
+
+  return html.join('\n')
+}
+
+function buildTobDocumentHtml({
   tobText,
   clientName,
 }: {
   tobText: string
   clientName: string
 }) {
-  return `${tobText}
+  const today = new Date().toLocaleDateString('en-GB')
 
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page {
+      size: A4;
+      margin: 34px 42px 42px;
+    }
 
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #17172f;
+      font-size: 10.5px;
+      line-height: 1.48;
+      margin: 0;
+      background: #ffffff;
+    }
 
+    .document {
+      width: 100%;
+    }
 
+    .header {
+      border-bottom: 3px solid #352deb;
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+    }
 
+    .brand {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      color: #17172f;
+      margin: 0;
+    }
 
-SIGNED FOR AND ON BEHALF OF ${clientName.toUpperCase()}
+    .brand span {
+      color: #352deb;
+    }
 
-Signature: /sn1/
+    .subtitle {
+      margin: 5px 0 0;
+      font-size: 10px;
+      color: #5f6270;
+    }
 
-Name:
+    .title-box {
+      background: #f4f4ff;
+      border: 1px solid #d8d7ff;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 22px;
+    }
 
-Title:
+    .title-box h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      line-height: 1.15;
+      color: #17172f;
+      letter-spacing: -0.5px;
+    }
 
-Date:
-`
+    .meta {
+      display: table;
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .meta-row {
+      display: table-row;
+    }
+
+    .meta-label,
+    .meta-value {
+      display: table-cell;
+      padding: 3px 0;
+      font-size: 10px;
+    }
+
+    .meta-label {
+      width: 110px;
+      font-weight: 700;
+      color: #5f6270;
+    }
+
+    .meta-value {
+      color: #17172f;
+    }
+
+    h1 {
+      font-size: 18px;
+      line-height: 1.2;
+      margin: 20px 0 10px;
+      color: #17172f;
+      page-break-after: avoid;
+    }
+
+    h2 {
+      font-size: 13px;
+      line-height: 1.25;
+      margin: 18px 0 8px;
+      color: #352deb;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      page-break-after: avoid;
+    }
+
+    p {
+      margin: 0 0 7px;
+    }
+
+    .clause {
+      margin-bottom: 7px;
+    }
+
+    .sub-clause {
+      margin-left: 16px;
+      padding-left: 10px;
+      border-left: 2px solid #d8d7ff;
+      color: #2d2d42;
+    }
+
+    strong {
+      font-weight: 700;
+    }
+
+    .refund-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 16px;
+      page-break-inside: avoid;
+    }
+
+    .refund-table th {
+      background: #352deb;
+      color: #ffffff;
+      text-align: left;
+      padding: 8px;
+      font-size: 10px;
+      border: 1px solid #352deb;
+    }
+
+    .refund-table td {
+      padding: 8px;
+      font-size: 10px;
+      border: 1px solid #d8d7ff;
+    }
+
+    .signature-section {
+      page-break-inside: avoid;
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 2px solid #352deb;
+    }
+
+    .signature-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #17172f;
+      margin: 0 0 14px;
+      text-transform: uppercase;
+    }
+
+    .signature-box {
+      border: 1px solid #d8d7ff;
+      border-radius: 10px;
+      padding: 16px;
+      background: #fbfbff;
+    }
+
+    .signature-line {
+      margin-bottom: 14px;
+      font-size: 10.5px;
+    }
+
+    .signature-anchor {
+      color: #fbfbff;
+      font-size: 1px;
+      line-height: 1px;
+    }
+
+    .footer {
+      margin-top: 26px;
+      padding-top: 12px;
+      border-top: 1px solid #d8d7ff;
+      font-size: 9px;
+      color: #5f6270;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="document">
+    <div class="header">
+      <p class="brand">Educated <span>Appointments</span></p>
+      <p class="subtitle">Specialist recruitment for Further Education, Apprenticeships and Skills</p>
+    </div>
+
+    <div class="title-box">
+      <h1>Terms of Business</h1>
+      <div class="meta">
+        <div class="meta-row">
+          <div class="meta-label">Prepared for</div>
+          <div class="meta-value">${escapeHtml(clientName)}</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-label">Prepared by</div>
+          <div class="meta-value">Educated Appointments Limited</div>
+        </div>
+        <div class="meta-row">
+          <div class="meta-label">Date</div>
+          <div class="meta-value">${today}</div>
+        </div>
+      </div>
+    </div>
+
+    ${formatTermsBodyHtml(tobText)}
+
+    <div class="signature-section">
+      <p class="signature-title">Signature and Acceptance</p>
+
+      <div class="signature-box">
+        <p><strong>For and on behalf of ${escapeHtml(clientName)}</strong></p>
+
+        <p class="signature-line">Signature:</p>
+        <p class="signature-anchor">/sn1/</p>
+
+        <p class="signature-line">Name:</p>
+        <p class="signature-line">Position:</p>
+        <p class="signature-line">Date:</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      Educated Appointments Limited · Company No. 11817946 · Westerfield Business Centre, Main Road, Ipswich, IP6 9AB
+    </div>
+  </div>
+</body>
+</html>`
 }
 
 export async function POST(request: NextRequest) {
@@ -202,10 +541,10 @@ export async function POST(request: NextRequest) {
 
     const accessToken = await getDocuSignAccessToken()
 
-    const documentText = buildTobDocumentText({
-      tobText,
-      clientName: client.company_name,
-    })
+    const documentHtml = buildTobDocumentHtml({
+  tobText,
+  clientName: client.company_name,
+})
 
     const envelopePayload = {
       emailSubject: `Educated Appointments Terms of Business - ${client.company_name}`,
@@ -219,11 +558,11 @@ Joe
 Educated Appointments`,
       documents: [
         {
-          documentBase64: Buffer.from(documentText, 'utf8').toString('base64'),
-          name: `Terms of Business - ${client.company_name}.txt`,
-          fileExtension: 'txt',
-          documentId: '1',
-        },
+  documentBase64: Buffer.from(documentHtml, 'utf8').toString('base64'),
+  name: `Terms of Business - ${client.company_name}.html`,
+  fileExtension: 'html',
+  documentId: '1',
+},
       ],
       recipients: {
         signers: [

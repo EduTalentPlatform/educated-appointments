@@ -37,7 +37,19 @@ AGREED COMMERCIAL TERMS:
 ${terms.exclusivity ? '- Exclusivity clause: this engagement is on an exclusive basis' : ''}
 ${terms.notes ? `- Additional agreed terms: ${terms.notes}` : ''}
 
-Write the complete document with all numbered clauses. Use formal legal language. Include the full refund schedule table. Make it ready to send.`
+Write the complete document with all numbered clauses. Use formal legal language.
+
+Formatting rules:
+- Do not use Markdown headings such as # or ##.
+- Do not use horizontal rules such as ---.
+- Do not use block quotes using >.
+- Do not include a signature section.
+- Do not include "Signature and Acceptance".
+- Do not include placeholder dotted signature lines.
+- Include the refund schedule as simple rows, not a Markdown table.
+- The CRM will add the branded formatting and DocuSign signature field separately.
+
+Make the wording ready to send.`
 
     const { text } = await callAI(prompt, { maxTokens: 6000 })
     return NextResponse.json({ tob: text })
