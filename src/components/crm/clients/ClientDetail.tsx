@@ -235,8 +235,19 @@ const [bdForm, setBdForm] = useState({
 const [addingActivity, setAddingActivity] = useState(false)
 
 // Contact state
+  const emptyContactForm = {
+    name: '',
+    title: '',
+    email: '',
+    phone: '',
+    linkedin: '',
+    role_type: 'Day-to-day',
+    is_primary: false,
+  }
+
   const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({ name: '', title: '', email: '', phone: '', linkedin: '', role_type: 'Day-to-day', is_primary: false })
+  const [contactForm, setContactForm] = useState(emptyContactForm)
+  const [editingContactId, setEditingContactId] = useState<string | null>(null)
   const [addingContact, setAddingContact] = useState(false)
 
   // Provider location state
@@ -420,16 +431,133 @@ async function deleteActivity(id: string) {
 }
   
     // ── Contacts ──────────────────────────────────────────────────────────────
-  async function addContact(e: React.FormEvent) {
+  function resetContactForm() {
+    setContactForm(emptyContactForm)
+    setEditingContactId(null)
+    setShowContactForm(false)
+  }
+
+  function openAddContactForm() {
+    setContactForm(emptyContactForm)
+    setEditingContactId(null)
+    setShowContactForm(true)
+  }
+
+  function openEditContactForm(contact: Contact) {
+    setContactForm({
+      name: contact.name ?? '',
+      title: contact.title ?? '',
+      email: contact.email ?? '',
+      phone: contact.phone ?? '',
+      linkedin: contact.linkedin ?? '',
+      role_type: contact.role_type || 'Day-to-day',
+      is_primary: contact.is_primary ?? false,
+    })
+    setEditingContactId(contact.id)
+    setShowContactForm(true)
+  }
+
+  async function saveContact(e: React.FormEvent) {
     e.preventDefault()
+
+    if (!contactForm.name.trim()) {
+      alert('Contact name is required.')
+      return
+    }
+
     setAddingContact(true)
-    const { data } = await supabase.from('client_contacts').insert({ ...contactForm, client_id: client.id }).select().single()
-    if (data) { setContacts(c => [...c, data]); setShowContactForm(false); setContactForm({ name: '', title: '', email: '', phone: '', linkedin: '', role_type: 'Day-to-day', is_primary: false }) }
+
+    const payload = {
+      name: contactForm.name.trim(),
+      title: contactForm.title || null,
+      email: contactForm.email || null,
+      phone: contactForm.phone || null,
+      linkedin: contactForm.linkedin || null,
+      role_type: contactForm.role_type || 'Day-to-day',
+      is_primary: contactForm.is_primary,
+    }
+
+    if (contactForm.is_primary) {
+      await supabase
+        .from('client_contacts')
+        .update({ is_primary: false })
+        .eq('client_id', client.id)
+    }
+
+    if (editingContactId) {
+      const { data, error } = await supabase
+        .from('client_contacts')
+        .update(payload)
+        .eq('id', editingContactId)
+        .eq('client_id', client.id)
+        .select()
+        .single()
+
+      if (error) {
+        alert(error.message || 'Could not update contact.')
+        setAddingContact(false)
+        return
+      }
+
+      if (data) {
+        setContacts(current =>
+          current.map(contact =>
+            contact.id === data.id
+              ? data
+              : {
+                  ...contact,
+                  is_primary: contactForm.is_primary
+                    ? false
+                    : contact.is_primary,
+                },
+          ),
+        )
+        resetContactForm()
+      }
+
+      setAddingContact(false)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('client_contacts')
+      .insert({ ...payload, client_id: client.id })
+      .select()
+      .single()
+
+    if (error) {
+      alert(error.message || 'Could not add contact.')
+      setAddingContact(false)
+      return
+    }
+
+    if (data) {
+      setContacts(current =>
+        contactForm.is_primary
+          ? [...current.map(contact => ({ ...contact, is_primary: false })), data]
+          : [...current, data],
+      )
+      resetContactForm()
+    }
+
     setAddingContact(false)
   }
 
   async function deleteContact(id: string) {
-    await supabase.from('client_contacts').delete().eq('id', id)
+    const confirmed = window.confirm('Delete this contact?')
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('client_contacts')
+      .delete()
+      .eq('id', id)
+      .eq('client_id', client.id)
+
+    if (error) {
+      alert(error.message || 'Could not delete contact.')
+      return
+    }
+
     setContacts(c => c.filter(x => x.id !== id))
   }
 
@@ -1647,7 +1775,13 @@ async function deleteSite(id: string) {
             <div className="crm-section-block">
               <div className="crm-section-block-header">
                 <h2 className="crm-section-heading">Contacts</h2>
-                <button className="crm-btn-primary crm-btn-sm" onClick={() => setShowContactForm(true)}>+ Add contact</button>
+                <button
+                  type="button"
+                  className="crm-btn-primary crm-btn-sm"
+                  onClick={openAddContactForm}
+                >
+                  + Add contact
+                </button>
               </div>
 
               {contacts.length === 0 && !showContactForm && <p className="crm-empty">No contacts yet.</p>}
@@ -1662,17 +1796,51 @@ async function deleteSite(id: string) {
                           <p className="ld-contact-name">{contact.name}</p>
                           {contact.is_primary && <span className="crm-badge" style={{ background: '#e8f5e8', color: '#217822', fontSize: 9 }}>Primary</span>}
                         </div>
-                        <p className="ld-contact-title">{contact.title}</p>
+                        <p className="ld-contact-title">{contact.title || 'No title recorded'}</p>
                         <span className="crm-badge" style={{ background: 'var(--primary-light)', color: 'var(--primary)', fontSize: 9, marginTop: 3 }}>{contact.role_type}</span>
                       </div>
                       <div className="ld-contact-actions">
-                        {!contact.is_primary && <button className="crm-icon-btn" onClick={() => setPrimary(contact.id)} title="Set primary">★</button>}
-                        <button className="crm-icon-btn crm-icon-btn-danger" onClick={() => deleteContact(contact.id)}>✕</button>
+                        <button
+                          type="button"
+                          className="crm-icon-btn"
+                          onClick={() => openEditContactForm(contact)}
+                          title="Edit contact"
+                        >
+                          ✎
+                        </button>
+                        {!contact.is_primary && (
+                          <button
+                            type="button"
+                            className="crm-icon-btn"
+                            onClick={() => setPrimary(contact.id)}
+                            title="Set primary"
+                          >
+                            ★
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="crm-icon-btn crm-icon-btn-danger"
+                          onClick={() => deleteContact(contact.id)}
+                          title="Delete contact"
+                        >
+                          ✕
+                        </button>
                       </div>
                     </div>
                     <div className="ld-contact-links">
-                      {contact.email && <a href={`mailto:${contact.email}`} className="ld-contact-link">✉️ {contact.email}</a>}
-                      {contact.phone && <a href={`tel:${contact.phone}`} className="ld-contact-link">📞 {contact.phone}</a>}
+                      {contact.email ? (
+                        <a href={`mailto:${contact.email}`} className="ld-contact-link">✉️ {contact.email}</a>
+                      ) : (
+                        <span className="ld-contact-link">✉️ No email</span>
+                      )}
+
+                      {contact.phone ? (
+                        <a href={`tel:${contact.phone}`} className="ld-contact-link">📞 {contact.phone}</a>
+                      ) : (
+                        <span className="ld-contact-link">📞 No phone</span>
+                      )}
+
                       {contact.linkedin && <a href={contact.linkedin} target="_blank" rel="noopener noreferrer" className="ld-contact-link">💼 LinkedIn</a>}
                     </div>
                   </div>
@@ -1680,7 +1848,27 @@ async function deleteSite(id: string) {
               </div>
 
               {showContactForm && (
-                <form onSubmit={addContact} className="ld-contact-form" style={{ marginTop: 12 }}>
+                <form onSubmit={saveContact} className="ld-contact-form" style={{ marginTop: 12 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 10,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <h3 className="crm-card-title">
+                      {editingContactId ? 'Edit contact' : 'Add contact'}
+                    </h3>
+
+                    {editingContactId && (
+                      <span className="crm-badge crm-badge-blue">
+                        Updating existing contact
+                      </span>
+                    )}
+                  </div>
+
                   <div className="crm-form-row">
                     <div className="crm-field"><label className="crm-label">Name *</label><input className="crm-input" required value={contactForm.name} onChange={e => setContactForm(f => ({...f, name: e.target.value}))} /></div>
                     <div className="crm-field"><label className="crm-label">Title</label><input className="crm-input" value={contactForm.title} onChange={e => setContactForm(f => ({...f, title: e.target.value}))} /></div>
@@ -1697,9 +1885,37 @@ async function deleteSite(id: string) {
                       </select>
                     </div>
                   </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <input
+                      type="checkbox"
+                      id="contact-primary"
+                      checked={contactForm.is_primary}
+                      onChange={e => setContactForm(f => ({...f, is_primary: e.target.checked}))}
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                    <label
+                      htmlFor="contact-primary"
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-dark)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Set as primary contact
+                    </label>
+                  </div>
+
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button type="button" className="crm-btn-ghost crm-btn-sm" onClick={() => setShowContactForm(false)}>Cancel</button>
-                    <button type="submit" className="crm-btn-primary crm-btn-sm" disabled={addingContact}>{addingContact ? 'Adding...' : 'Add contact'}</button>
+                    <button type="button" className="crm-btn-ghost crm-btn-sm" onClick={resetContactForm}>Cancel</button>
+                    <button type="submit" className="crm-btn-primary crm-btn-sm" disabled={addingContact}>
+                      {addingContact
+                        ? 'Saving...'
+                        : editingContactId
+                          ? 'Save changes'
+                          : 'Add contact'}
+                    </button>
                   </div>
                 </form>
               )}
