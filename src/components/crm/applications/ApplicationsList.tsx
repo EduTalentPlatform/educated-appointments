@@ -108,7 +108,7 @@ const SORT_OPTIONS = [
   { value: 'last_updated', label: 'Last updated' },
   { value: 'vacancy_az', label: 'Vacancy A–Z' },
   { value: 'vacancy_za', label: 'Vacancy Z–A' },
-  { value: 'client_az', label: 'Client A–Z' },
+  { value: 'client_az', label: 'Client A–Z / Vacancy A–Z' },
   { value: 'candidate_az', label: 'Candidate A–Z' },
   { value: 'newest', label: 'Newest applications' },
   { value: 'oldest', label: 'Oldest applications' },
@@ -135,7 +135,7 @@ export default function ApplicationsList({
   const applications = initialApplications
   const [search, setSearch] = useState('')
   const [stageFilter, setStageFilter] = useState('all')
-  const [sortBy, setSortBy] = useState('last_updated')
+  const [sortBy, setSortBy] = useState('client_az')
   const [viewMode, setViewMode] = useState<'live' | 'archived'>('live')
 
   const [showAddApplication, setShowAddApplication] = useState(false)
@@ -302,27 +302,20 @@ export default function ApplicationsList({
     }))
 
     return groups.sort((a, b) => {
-      switch (sortBy) {
-        case 'vacancy_az':
-          return a.vacancyTitle.localeCompare(b.vacancyTitle)
+  const clientCompare = a.clientName.localeCompare(b.clientName, 'en-GB', {
+    sensitivity: 'base',
+  })
 
-        case 'vacancy_za':
-          return b.vacancyTitle.localeCompare(a.vacancyTitle)
+  if (clientCompare !== 0) return clientCompare
 
-        case 'client_az':
-          return a.clientName.localeCompare(b.clientName)
+  const vacancyCompare = a.vacancyTitle.localeCompare(b.vacancyTitle, 'en-GB', {
+    sensitivity: 'base',
+  })
 
-        case 'candidate_az':
-          return a.vacancyTitle.localeCompare(b.vacancyTitle)
+  if (vacancyCompare !== 0) return vacancyCompare
 
-        case 'newest':
-        case 'oldest':
-        case 'stage':
-        case 'last_updated':
-        default:
-          return b.latestUpdated - a.latestUpdated
-      }
-    })
+  return b.latestUpdated - a.latestUpdated
+})
   }, [filteredApplications, sortBy])
 
   const countByStage = (stage: string) =>
