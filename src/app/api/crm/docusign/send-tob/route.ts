@@ -37,6 +37,14 @@ function clean(value: unknown) {
   return String(value ?? '').trim()
 }
 
+function safeStorageName(value: string) {
+  return String(value || 'document')
+    .trim()
+    .replace(/[^a-z0-9\-_ ]/gi, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 80)
+}
+
 function base64Url(input: Buffer | string) {
   return Buffer.from(input)
     .toString('base64')
@@ -672,16 +680,41 @@ Educated Appointments`,
       throw new Error('DocuSign did not return an envelope ID.')
     }
 
-    await supabase
-      .from('clients')
-      .update({
-        docusign_tob_envelope_id: envelopeId,
-        docusign_tob_status: envelopeJson?.status || 'sent',
-        docusign_tob_sent_at: new Date().toISOString(),
-        tob_signed: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', clientId)
+    const storageBucket = 'client-documents'
+const storagePath = `${clientId}/terms-of-business/${safeStorageName(
+  client.company_name,
+)}_${envelopeId}.html`
+
+const { error: uploadError } = await supabase.storage
+  .from(storageBucket)
+  .upload(storagePath, Buffer.from(documentHtml, 'utf8'), {
+    contentType: 'text/html; charset=utf-8',
+    upsert: true,
+  })
+
+if (uploadError) {
+  console.error('TOB storage upload error:', uploadError)
+
+  throw new Error(
+    uploadError.message || 'DocuSign sent, but the TOB could not be stored.',
+  )
+}
+
+const {
+  data: { publicUrl: tobUrl },
+} = supabase.storage.from(storageBucket).getPublicUrl(storagePath)
+
+await supabase
+  .from('clients')
+  .update({
+    tob_url: tobUrl,
+    docusign_tob_envelope_id: envelopeId,
+    docusign_tob_status: envelopeJson?.status || 'sent',
+    docusign_tob_sent_at: new Date().toISOString(),
+    tob_signed: false,
+    updated_at: new Date().toISOString(),
+  })
+  .eq('id', clientId)
 
     await supabase.from('client_activities').insert({
       client_id: clientId,
@@ -696,11 +729,14 @@ Educated Appointments`,
     })
 
     return NextResponse.json({
-      success: true,
-      envelopeId,
-      status: envelopeJson?.status || 'sent',
-      message: `Terms of Business sent to ${signerEmail} via DocuSign.`,
-    })
+  success: true,
+  envelopeId,
+  status: envelopeJson?.status || 'sent',
+  tobUrl,
+  storageBucket,
+  storagePath,
+  message: `Terms of Business sent to ${signerEmail} via DocuSign and saved to the client folder.`,
+})
   } catch (error: any) {
     console.error('DocuSign TOB send error:', error)
 

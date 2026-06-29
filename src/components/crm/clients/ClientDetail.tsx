@@ -871,12 +871,13 @@ async function deleteSite(id: string) {
   )
 
   setClient(current => ({
-    ...current,
-    docusign_tob_envelope_id: data?.envelopeId ?? null,
-    docusign_tob_status: data?.status ?? 'sent',
-    docusign_tob_sent_at: new Date().toISOString(),
-    tob_signed: false,
-  } as any))
+  ...current,
+  tob_url: data?.tobUrl ?? current.tob_url,
+  docusign_tob_envelope_id: data?.envelopeId ?? null,
+  docusign_tob_status: data?.status ?? 'sent',
+  docusign_tob_sent_at: new Date().toISOString(),
+  tob_signed: false,
+} as any))
 
   setTerms(current => ({
     ...current,
