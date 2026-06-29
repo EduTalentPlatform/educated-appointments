@@ -1291,8 +1291,8 @@ const activityEmailTemplates = useMemo(() => {
       postcode: cleanCandidateFact(updates.postcode) ?? c.postcode ?? null,
 
       source: c.source ?? null,
-      status: c.status ?? 'active',
-      actively_looking: c.actively_looking ?? true,
+      status: c.status ?? 'passive',
+actively_looking: c.actively_looking ?? false,
       work_type_pref: c.work_type_pref ?? null,
 
       can_deliver: nextCanDeliver,
@@ -1396,8 +1396,8 @@ async function savePortalCandidateFacts() {
       postcode: portalCandidateForm.postcode || null,
 
       source: c.source || null,
-      status: c.status || 'active',
-      actively_looking: c.actively_looking ?? true,
+      status: c.status || 'passive',
+actively_looking: c.actively_looking ?? false,
       work_type_pref: c.work_type_pref || null,
       linkedin: c.linkedin || null,
 

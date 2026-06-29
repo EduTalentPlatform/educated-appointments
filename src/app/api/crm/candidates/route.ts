@@ -380,14 +380,9 @@ export async function POST(request: NextRequest) {
         lng,
 
         source: cleanText(body.source) || 'crm',
-        status: cleanText(body.status) || 'active',
-        notes: cleanText(body.notes),
-        actively_looking:
-          body.status === 'active'
-            ? true
-            : body.status === 'passive'
-              ? false
-              : body.actively_looking ?? true,
+status: 'passive',
+notes: cleanText(body.notes),
+actively_looking: false,
         work_type_pref: cleanText(body.work_type_pref),
         linkedin,
 
@@ -460,14 +455,14 @@ export async function PATCH(request: NextRequest) {
       lng,
 
       source: cleanText(body.source),
-      status: cleanText(body.status) || 'active',
-      notes: cleanText(body.notes),
-      actively_looking:
-        body.status === 'active'
-          ? true
-          : body.status === 'passive'
-            ? false
-            : body.actively_looking ?? true,
+status: cleanText(body.status) || 'passive',
+notes: cleanText(body.notes),
+actively_looking:
+  body.status === 'active'
+    ? true
+    : body.status === 'passive'
+      ? false
+      : body.actively_looking ?? false,
       work_type_pref: cleanText(body.work_type_pref),
       linkedin: cleanText(body.linkedin),
 

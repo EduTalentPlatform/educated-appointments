@@ -166,16 +166,16 @@ const [mainRoleFilter, setMainRoleFilter] = useState('all')
   const cvRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    linkedin: '',
-    add_to_vacancy_id: '',
-    source: '',
-    postcode: '',
-    actively_looking: true,
-  })
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  linkedin: '',
+  add_to_vacancy_id: '',
+  source: '',
+  postcode: '',
+  actively_looking: false,
+})
 
   useEffect(() => {
   if (!showForm || vacanciesLoaded || vacanciesLoading) return
@@ -694,7 +694,7 @@ const visibleStandardOptions = useMemo(() => {
       add_to_vacancy_id: '',
       source: '',
       postcode: '',
-      actively_looking: true,
+      actively_looking: false,
     })
 
     setCvFile(null)
@@ -763,8 +763,8 @@ const visibleStandardOptions = useMemo(() => {
         linkedin: form.linkedin || null,
         source: form.source || 'crm',
         postcode: form.postcode || null,
-        status: 'active',
-        actively_looking: true,
+        status: 'passive',
+actively_looking: false,
       }),
     })
 
