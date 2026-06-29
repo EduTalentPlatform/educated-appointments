@@ -112,10 +112,11 @@ export default function ClientPortalAccessPanel({
   const [portalUsers, setPortalUsers] = useState(initialPortalUsers)
   const [form, setForm] = useState(() => getInitialForm(contacts))
   const [creating, setCreating] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
-  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
-  const [sendingEmail, setSendingEmail] = useState(false)
+const [message, setMessage] = useState<string | null>(null)
+const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
+const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null)
+const [sendingEmail, setSendingEmail] = useState(false)
+const [resendingUserId, setResendingUserId] = useState<string | null>(null)
 
   const contactsWithEmail = useMemo(
     () => contacts.filter(contact => contact.email),
@@ -200,6 +201,54 @@ export default function ClientPortalAccessPanel({
     setEmailPreview(null)
     setSendingEmail(false)
   }
+
+  async function resendPortalLoginEmail(user: PortalUser) {
+  setResendingUserId(user.id)
+  setMessage(null)
+  setTemporaryPassword(null)
+  setEmailPreview(null)
+
+  const res = await fetch('/api/crm/client-portal-users', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: user.id,
+      action: 'resend_login_email',
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    setMessage(data?.error || 'Could not resend portal login email.')
+    setResendingUserId(null)
+    return
+  }
+
+  if (data?.portalUser) {
+    setPortalUsers(current =>
+      current.map(item =>
+        item.id === user.id ? data.portalUser : item,
+      ),
+    )
+  }
+
+  if (data?.temporaryPassword) {
+    setTemporaryPassword(data.temporaryPassword)
+    setEmailPreview(
+      buildEmployerPortalIntroductionEmail({
+        name: data.portalUser?.name || user.name,
+        email: data.portalUser?.email || user.email,
+        temporaryPassword: data.temporaryPassword,
+      }),
+    )
+    setMessage(
+      'Fresh temporary password created. Review the email before sending.',
+    )
+  }
+
+  setResendingUserId(null)
+}
 
   async function toggleActive(user: PortalUser) {
     const res = await fetch('/api/crm/client-portal-users', {
@@ -513,11 +562,21 @@ export default function ClientPortalAccessPanel({
                   </span>
 
                   <button
-                    className="crm-btn-ghost crm-btn-sm"
-                    onClick={() => toggleActive(user)}
-                  >
-                    {user.active ? 'Deactivate' : 'Reactivate'}
-                  </button>
+  type="button"
+  className="crm-btn-ghost crm-btn-sm"
+  onClick={() => resendPortalLoginEmail(user)}
+  disabled={resendingUserId === user.id}
+>
+  {resendingUserId === user.id ? 'Preparing...' : 'Resend login email'}
+</button>
+
+<button
+  type="button"
+  className="crm-btn-ghost crm-btn-sm"
+  onClick={() => toggleActive(user)}
+>
+  {user.active ? 'Deactivate' : 'Reactivate'}
+</button>
                 </div>
               </div>
             ))}

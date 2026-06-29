@@ -260,26 +260,103 @@ export async function PATCH(request: Request) {
     )
   }
 
-  const updates: Record<string, any> = {
-    updated_at: new Date().toISOString(),
-  }
-
-  if (typeof body.active === 'boolean') updates.active = body.active
-  if (body.name !== undefined) updates.name = String(body.name ?? '').trim()
-  if (body.role !== undefined) updates.role = String(body.role ?? '').trim()
-
   const supabase = getServiceClient()
 
-  const { data, error } = await supabase
+if (body.action === 'resend_login_email') {
+  const { data: portalUser, error: portalUserError } = await supabase
     .from('client_portal_users')
-    .update(updates)
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (portalUserError || !portalUser) {
+    return NextResponse.json(
+      {
+        error:
+          portalUserError?.message ||
+          'Could not find this employer portal user.',
+      },
+      { status: 404 },
+    )
+  }
+
+  if (!portalUser.auth_user_id) {
+    return NextResponse.json(
+      {
+        error:
+          'This portal user is not linked to a Supabase Auth account.',
+      },
+      { status: 400 },
+    )
+  }
+
+  const temporaryPassword = makeTemporaryPassword()
+
+  const { error: authError } = await supabase.auth.admin.updateUserById(
+    portalUser.auth_user_id,
+    {
+      password: temporaryPassword,
+      email_confirm: true,
+      user_metadata: {
+        user_type: 'client_portal',
+        client_id: portalUser.client_id,
+        name: portalUser.name,
+      },
+    },
+  )
+
+  if (authError) {
+    return NextResponse.json(
+      {
+        error:
+          authError.message ||
+          'Could not reset the employer portal login password.',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: updatedPortalUser, error: updateError } = await supabase
+    .from('client_portal_users')
+    .update({
+      active: true,
+      must_change_password: true,
+      password_changed_at: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .select('*')
     .single()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ portalUser: data })
+  return NextResponse.json({
+    portalUser: updatedPortalUser,
+    temporaryPassword,
+    message: 'Portal login email can now be resent.',
+  })
+}
+
+const updates: Record<string, any> = {
+  updated_at: new Date().toISOString(),
+}
+
+if (typeof body.active === 'boolean') updates.active = body.active
+if (body.name !== undefined) updates.name = String(body.name ?? '').trim()
+if (body.role !== undefined) updates.role = String(body.role ?? '').trim()
+
+const { data, error } = await supabase
+  .from('client_portal_users')
+  .update(updates)
+  .eq('id', id)
+  .select('*')
+  .single()
+
+if (error) {
+  return NextResponse.json({ error: error.message }, { status: 500 })
+}
+
+return NextResponse.json({ portalUser: data })
 }
