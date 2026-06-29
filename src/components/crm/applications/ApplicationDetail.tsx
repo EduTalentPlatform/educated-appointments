@@ -760,6 +760,39 @@ const [candidateDocumentUploadMessage, setCandidateDocumentUploadMessage] =
 const [candidateDocumentUploadError, setCandidateDocumentUploadError] =
   useState<string | null>(null)
 
+const [deletingCandidateDocumentId, setDeletingCandidateDocumentId] =
+  useState<string | null>(null)
+
+async function deleteCandidateDocument(documentId: string) {
+  const confirmed = window.confirm(
+    'Delete this candidate document? This will remove the file from the CRM.',
+  )
+
+  if (!confirmed) return
+
+  setDeletingCandidateDocumentId(documentId)
+
+  try {
+    const res = await fetch(`/api/crm/candidate-documents/${documentId}`, {
+      method: 'DELETE',
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      throw new Error(json?.error || 'Could not delete candidate document.')
+    }
+
+    setDocuments(current =>
+      current.filter(document => document.id !== documentId),
+    )
+  } catch (error: any) {
+    alert(error?.message || 'Could not delete candidate document.')
+  } finally {
+    setDeletingCandidateDocumentId(null)
+  }
+}
+
   const c = app.candidates
   const v = app.vacancies
   const client = Array.isArray(v?.clients) ? v?.clients?.[0] : v?.clients
@@ -3153,6 +3186,8 @@ Kind regards,`
   empty="No candidate documents on file. Upload one above or add them on the candidate profile."
   documents={documents}
   documentKind="candidate"
+  onDeleteDocument={deleteCandidateDocument}
+  deletingDocumentId={deletingCandidateDocumentId}
 />
 
 <DocumentGroupCard
@@ -7409,6 +7444,8 @@ function DocumentGroupCard({
   empty,
   documents,
   documentKind,
+  onDeleteDocument,
+  deletingDocumentId,
 }: {
   title: string
   empty: string
@@ -7424,6 +7461,8 @@ function DocumentGroupCard({
     extracted_text?: string | null
   }>
   documentKind: 'candidate' | 'vacancy'
+  onDeleteDocument?: (documentId: string) => void
+  deletingDocumentId?: string | null
 }) {
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null)
 
@@ -7496,27 +7535,51 @@ function DocumentGroupCard({
                   </p>
                 )}
 
-                {hasFile ? (
-                  <button
-                    type="button"
-                    onClick={() => handleOpenDocument(doc)}
-                    disabled={isOpening}
-                    className="crm-pipeline-link"
-                    style={{
-                      border: 0,
-                      background: 'transparent',
-                      padding: 0,
-                      cursor: isOpening ? 'wait' : 'pointer',
-                      textAlign: 'left',
-                    }}
-                  >
-                    {isOpening ? 'Opening secure link...' : 'Open full document ↗'}
-                  </button>
-                ) : (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    No file attached.
-                  </p>
-                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    alignItems: 'center',
+                    marginTop: 10,
+                  }}
+                >
+                  {hasFile ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDocument(doc)}
+                      disabled={isOpening}
+                      className="crm-pipeline-link"
+                      style={{
+                        border: 0,
+                        background: 'transparent',
+                        padding: 0,
+                        cursor: isOpening ? 'wait' : 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      {isOpening
+                        ? 'Opening secure link...'
+                        : 'Open full document ↗'}
+                    </button>
+                  ) : (
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      No file attached.
+                    </p>
+                  )}
+
+                  {onDeleteDocument && documentKind === 'candidate' && (
+                    <button
+                      type="button"
+                      className="crm-icon-btn crm-icon-btn-danger"
+                      onClick={() => onDeleteDocument(doc.id)}
+                      disabled={deletingDocumentId === doc.id}
+                      title="Delete candidate document"
+                    >
+                      {deletingDocumentId === doc.id ? '…' : '✕'}
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })}
