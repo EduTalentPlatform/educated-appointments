@@ -1475,11 +1475,11 @@ async function archiveOutreachOpportunity(outreachId: string, employerName?: str
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-  action: 'archive_outreach_opportunity',
-  speculation_id: speculation.id,
-  outreach_id: outreachId,
-  reason: reason.trim(),
-}),
+      action: 'archive_outreach_opportunity',
+      speculation_id: speculation.id,
+      outreach_id: outreachId,
+      reason: reason.trim(),
+    }),
   })
 
   const data = await res.json().catch(() => null)
@@ -1490,11 +1490,19 @@ async function archiveOutreachOpportunity(outreachId: string, employerName?: str
     return
   }
 
-  if (data.outreach) {
-    setSpecOutreach((current: any[]) =>
-      current.map(item => (item.id === outreachId ? data.outreach : item)),
-    )
-  }
+  setSpecOutreach((current: any[]) =>
+    current.map(item =>
+      item.id === outreachId
+        ? {
+            ...item,
+            ...(data.outreach || {}),
+            opportunity_status: 'old',
+            archived_at: data.outreach?.archived_at || new Date().toISOString(),
+            archived_reason: data.outreach?.archived_reason || reason.trim() || null,
+          }
+        : item,
+    ),
+  )
 
   if (data.note) {
     setSpeculationNotes(current => [data.note, ...current])
