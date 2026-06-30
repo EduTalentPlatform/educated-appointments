@@ -296,8 +296,12 @@ export async function POST(request: NextRequest) {
       briefing_notes: cleanString(body.briefing_notes),
       reason_for_vacancy: cleanString(body.reason_for_vacancy),
       advertising_notes: cleanString(body.advertising_notes),
-      fee_info: cleanString(body.fee_info),
+            fee_info: cleanString(body.fee_info),
+      target_fill_type: body.target_fill_type || 'specific_date',
       target_fill_date: body.target_fill_date || null,
+
+      vacancy_analysis: body.vacancy_analysis ?? null,
+      vacancy_analysis_updated_at: body.vacancy_analysis_updated_at ?? null,
 
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -462,9 +466,16 @@ export async function PATCH(request: NextRequest) {
 
       briefing_notes: body.briefing_notes,
       reason_for_vacancy: body.reason_for_vacancy,
-      advertising_notes: body.advertising_notes,
+            advertising_notes: body.advertising_notes,
       fee_info: body.fee_info,
-      target_fill_date: body.target_fill_date || undefined,
+      target_fill_type: body.target_fill_type,
+      target_fill_date:
+        body.target_fill_date === null
+          ? null
+          : body.target_fill_date || undefined,
+
+      vacancy_analysis: body.vacancy_analysis,
+      vacancy_analysis_updated_at: body.vacancy_analysis_updated_at,
 
       updated_at: new Date().toISOString(),
     })

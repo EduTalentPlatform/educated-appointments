@@ -22,10 +22,24 @@ export default async function CrmVacancyPage({ params }: Props) {
     { data: vacancyDocuments },
   ] = await Promise.all([
     supabase
-      .from('vacancies')
-      .select('*, clients(company_name, contact_name, email, website)')
-      .eq('id', id)
-      .single(),
+  .from('vacancies')
+  .select(`
+    *,
+    clients(
+      id,
+      company_name,
+      contact_name,
+      email,
+      website,
+      postcode,
+      fee_agreed,
+      agreed_terms,
+      billing_terms,
+      terms
+    )
+  `)
+  .eq('id', id)
+  .single(),
 
     supabase
       .from('applications')

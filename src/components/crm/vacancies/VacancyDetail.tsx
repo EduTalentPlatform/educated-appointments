@@ -31,6 +31,9 @@ type Vacancy = {
   advertising_notes: string | null
   fee_info: string | null
   target_fill_date: string | null
+  target_fill_type?: 'asap' | 'specific_date' | null
+  vacancy_analysis?: any | null
+  vacancy_analysis_updated_at?: string | null
   subject_area: string | null
   candidate_pack_text?: string | null
   candidate_pack_json?: any | null
@@ -482,6 +485,41 @@ function CandidateMatchingCard({
   )
 }
 
+function normalisePostcode(value?: string | null) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function getClientRecord(vacancy: Vacancy) {
+  return Array.isArray(vacancy.clients)
+    ? vacancy.clients[0] ?? null
+    : vacancy.clients ?? null
+}
+
+function getClientPostcode(client: any) {
+  return normalisePostcode(
+    client?.postcode ||
+      client?.post_code ||
+      client?.address_postcode ||
+      client?.office_postcode ||
+      client?.billing_postcode ||
+      '',
+  )
+}
+
+function getClientBillingInfo(client: any) {
+  return [
+    client?.fee_agreed,
+    client?.agreed_terms,
+    client?.billing_terms,
+    client?.terms,
+    client?.fee_info,
+  ]
+    .filter(Boolean)
+    .map(value => String(value).trim())
+    .filter(Boolean)
+    .join(' · ')
+}
+
 export default function VacancyDetail({
   vacancy: initialVacancy,
   applications: initialApps,
@@ -549,15 +587,29 @@ const [editVacancyForm, setEditVacancyForm] = useState({
 })
   
   // Briefing tab
+    const clientRecord = getClientRecord(initialVacancy)
+  const clientPostcode = getClientPostcode(clientRecord)
+  const clientBillingInfo = getClientBillingInfo(clientRecord)
+
   const [briefing, setBriefing] = useState({
     reason_for_vacancy: initialVacancy.reason_for_vacancy ?? '',
     briefing_notes: initialVacancy.briefing_notes ?? '',
-    advertising_notes: initialVacancy.advertising_notes ?? '',
     fee_info: initialVacancy.fee_info ?? '',
+    target_fill_type:
+      initialVacancy.target_fill_type ||
+      (initialVacancy.target_fill_date ? 'specific_date' : 'asap'),
     target_fill_date: initialVacancy.target_fill_date ?? '',
     work_type: initialVacancy.work_type ?? 'office',
     postcode: initialVacancy.postcode ?? '',
   })
+
+  const [vacancyAnalysis, setVacancyAnalysis] = useState<any>(
+    initialVacancy.vacancy_analysis ?? null,
+  )
+  const [generatingVacancyAnalysis, setGeneratingVacancyAnalysis] =
+    useState(false)
+  const [vacancyAnalysisError, setVacancyAnalysisError] =
+    useState<string | null>(null)
   const [savingBriefing, setSavingBriefing] = useState(false)
   const [briefingSaved, setBriefingSaved] = useState(false)
   const [postcodeError, setPostcodeError] = useState<string | null>(null)
@@ -982,10 +1034,115 @@ async function saveDesc(advert: string, anon: string, goLive = false) {
     }))
   }
 
-  async function saveBriefing() {
+    function useClientPostcode() {
+    if (!clientPostcode) return
+
+    setBriefing(form => ({
+      ...form,
+      postcode: clientPostcode,
+    }))
+  }
+
+  function useClientBillingInfo() {
+    if (!clientBillingInfo) return
+
+    setBriefing(form => ({
+      ...form,
+      fee_info: clientBillingInfo,
+    }))
+  }
+
+  async function generateVacancyAnalysis() {
+    setGeneratingVacancyAnalysis(true)
+    setVacancyAnalysisError(null)
+
+    const client = getClientRecord(vacancy)
+
+    const res = await fetch('/api/crm/vacancy-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vacancy: {
+          id: vacancy.id,
+          title: vacancy.title,
+          sector: vacancy.sector,
+          role_type: vacancy.role_type,
+          subject_area: vacancy.subject_area,
+          type: vacancy.type,
+          location: vacancy.location,
+          region: vacancy.region,
+          postcode: briefing.postcode || vacancy.postcode,
+          salary_display: vacancy.salary_display,
+          salary_min: vacancy.salary_min,
+          salary_max: vacancy.salary_max,
+          description: vacancy.description,
+          anonymous_description: vacancy.anonymous_description,
+          employer_job_description:
+            jdText || vacancy.employer_job_description,
+          briefing_notes: briefing.briefing_notes,
+          reason_for_vacancy: briefing.reason_for_vacancy,
+          fee_info: briefing.fee_info,
+          target_fill_type: briefing.target_fill_type,
+          target_fill_date:
+            briefing.target_fill_type === 'asap'
+              ? null
+              : briefing.target_fill_date || null,
+        },
+        client: {
+          id: client?.id,
+          company_name: client?.company_name,
+          sector: client?.sector,
+          region: client?.region,
+          website: client?.website,
+          fee_agreed: client?.fee_agreed,
+          agreed_terms: client?.agreed_terms,
+          billing_terms: client?.billing_terms,
+          terms: client?.terms,
+        },
+      }),
+    })
+
+    const data = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      setVacancyAnalysisError(
+        data?.error || 'Could not generate vacancy analysis.',
+      )
+      setGeneratingVacancyAnalysis(false)
+      return
+    }
+
+    setVacancyAnalysis(data.analysis)
+    setVacancy(current => ({
+      ...current,
+      vacancy_analysis: data.analysis,
+      vacancy_analysis_updated_at: data.updated_at,
+    }))
+
+    setGeneratingVacancyAnalysis(false)
+  }
+
+    async function saveBriefing() {
     setSavingBriefing(true)
-    await patchVacancy(briefing)
-    setVacancy(v => ({ ...v, ...briefing }))
+
+    const payload = {
+      ...briefing,
+      target_fill_date:
+        briefing.target_fill_type === 'asap'
+          ? null
+          : briefing.target_fill_date || null,
+    }
+
+    const res = await patchVacancy(payload)
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok) {
+      alert(json?.error || 'Could not save briefing.')
+      setSavingBriefing(false)
+      return
+    }
+
+    setVacancy(v => ({ ...v, ...payload }))
     setBriefingSaved(true)
     setTimeout(() => setBriefingSaved(false), 3000)
     setSavingBriefing(false)
@@ -2338,7 +2495,7 @@ const filteredCandidateOptions = useMemo(() => {
         </div>
       )}
 
-      {activeTab === 'briefing' && (
+            {activeTab === 'briefing' && (
         <div className="crm-card vd-tab-content">
           <div
             style={{
@@ -2369,22 +2526,116 @@ const filteredCandidateOptions = useMemo(() => {
             </div>
 
             <div className="crm-field">
-              <label className="crm-label">Target fill date</label>
-              <input
-                className="crm-input"
-                type="date"
-                value={briefing.target_fill_date}
-                onChange={e =>
-                  setBriefing(form => ({
-                    ...form,
-                    target_fill_date: e.target.value,
-                  }))
-                }
-              />
+              <label className="crm-label">Target fill</label>
+
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <button
+                  type="button"
+                  className="crm-btn-ghost crm-btn-sm"
+                  style={
+                    briefing.target_fill_type === 'asap'
+                      ? {
+                          background: 'var(--primary)',
+                          color: 'var(--white)',
+                          borderColor: 'var(--primary)',
+                        }
+                      : {}
+                  }
+                  onClick={() =>
+                    setBriefing(form => ({
+                      ...form,
+                      target_fill_type: 'asap',
+                      target_fill_date: '',
+                    }))
+                  }
+                >
+                  ASAP
+                </button>
+
+                <button
+                  type="button"
+                  className="crm-btn-ghost crm-btn-sm"
+                  style={
+                    briefing.target_fill_type === 'specific_date'
+                      ? {
+                          background: 'var(--primary)',
+                          color: 'var(--white)',
+                          borderColor: 'var(--primary)',
+                        }
+                      : {}
+                  }
+                  onClick={() =>
+                    setBriefing(form => ({
+                      ...form,
+                      target_fill_type: 'specific_date',
+                    }))
+                  }
+                >
+                  Specific date
+                </button>
+              </div>
+
+              {briefing.target_fill_type === 'specific_date' && (
+                <input
+                  className="crm-input"
+                  type="date"
+                  value={briefing.target_fill_date}
+                  onChange={e =>
+                    setBriefing(form => ({
+                      ...form,
+                      target_fill_date: e.target.value,
+                    }))
+                  }
+                />
+              )}
             </div>
 
             <div className="crm-field">
               <label className="crm-label">Fee / billing info</label>
+
+              {clientBillingInfo && (
+                <div
+                  style={{
+                    marginBottom: 8,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: 'var(--light-bg)',
+                    border: '1px solid var(--border-light)',
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 900,
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Suggested from client terms
+                  </p>
+
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--text-dark)',
+                      marginBottom: 8,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {clientBillingInfo}
+                  </p>
+
+                  <button
+                    type="button"
+                    className="crm-btn-ghost crm-btn-sm"
+                    onClick={useClientBillingInfo}
+                  >
+                    Use client terms →
+                  </button>
+                </div>
+              )}
+
               <input
                 className="crm-input"
                 placeholder="e.g. 15% of salary, invoiced on start"
@@ -2397,15 +2648,57 @@ const filteredCandidateOptions = useMemo(() => {
                 }
               />
             </div>
-          </div>
 
-          <div className="crm-field" style={{ marginTop: 16 }}>
+            <div className="crm-field">
               <label className="crm-label">
                 Office postcode{' '}
                 <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
                   (for candidate radius matching)
                 </span>
               </label>
+
+              {clientPostcode && (
+                <div
+                  style={{
+                    marginBottom: 8,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: 'var(--light-bg)',
+                    border: '1px solid var(--border-light)',
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 900,
+                      textTransform: 'uppercase',
+                      color: 'var(--text-muted)',
+                      marginBottom: 4,
+                    }}
+                  >
+                    Suggested from client address
+                  </p>
+
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--text-dark)',
+                      marginBottom: 8,
+                      fontWeight: 800,
+                    }}
+                  >
+                    {clientPostcode}
+                  </p>
+
+                  <button
+                    type="button"
+                    className="crm-btn-ghost crm-btn-sm"
+                    onClick={useClientPostcode}
+                  >
+                    Use this postcode →
+                  </button>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
@@ -2456,6 +2749,7 @@ const filteredCandidateOptions = useMemo(() => {
                 </p>
               )}
             </div>
+          </div>
 
           <div className="crm-field" style={{ marginTop: 16 }}>
             <label className="crm-label">
@@ -2473,22 +2767,6 @@ const filteredCandidateOptions = useMemo(() => {
                 setBriefing(form => ({
                   ...form,
                   briefing_notes: e.target.value,
-                }))
-              }
-            />
-          </div>
-
-          <div className="crm-field" style={{ marginTop: 12 }}>
-            <label className="crm-label">Advertising strategy</label>
-            <textarea
-              className="crm-input"
-              rows={3}
-              placeholder="Where are we advertising? Exclusivity? Timelines..."
-              value={briefing.advertising_notes}
-              onChange={e =>
-                setBriefing(form => ({
-                  ...form,
-                  advertising_notes: e.target.value,
                 }))
               }
             />
@@ -2523,6 +2801,162 @@ const filteredCandidateOptions = useMemo(() => {
               ✓ Saved
             </p>
           )}
+
+          <div
+            className="crm-card"
+            style={{
+              marginTop: 22,
+              background: 'var(--light-bg)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'flex-start',
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <h3 className="crm-card-title">Vacancy Analysis</h3>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                    marginTop: 4,
+                  }}
+                >
+                  Analyse the role, salary, location, job description and client
+                  brief to spot selling points, risks and questions to ask.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="crm-btn-ai"
+                onClick={generateVacancyAnalysis}
+                disabled={generatingVacancyAnalysis}
+              >
+                {generatingVacancyAnalysis
+                  ? '✦ Analysing...'
+                  : '✦ Analyse vacancy'}
+              </button>
+            </div>
+
+            {vacancyAnalysisError && (
+              <p
+                style={{
+                  fontSize: 12,
+                  color: '#e53e3e',
+                  fontWeight: 700,
+                  marginBottom: 12,
+                }}
+              >
+                {vacancyAnalysisError}
+              </p>
+            )}
+
+            {vacancyAnalysis ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                }}
+              >
+                {[
+                  ['Market position', vacancyAnalysis.market_position],
+                  ['What looks good', vacancyAnalysis.what_looks_good],
+                  ['Risks / red flags', vacancyAnalysis.risks],
+                  ['Recruiter recommendations', vacancyAnalysis.recommendations],
+                  ['Questions to ask client', vacancyAnalysis.questions_to_ask],
+                  ['Search difficulty', vacancyAnalysis.search_difficulty],
+                ].map(([title, content]: any) => (
+                  <div
+                    key={title}
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      background: '#fff',
+                      border: '1px solid var(--border-light)',
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        color: 'var(--text-dark)',
+                        marginBottom: 8,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.4,
+                      }}
+                    >
+                      {title}
+                    </p>
+
+                    {Array.isArray(content) ? (
+                      <ul
+                        style={{
+                          paddingLeft: 18,
+                          margin: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 6,
+                        }}
+                      >
+                        {content.map((item: string) => (
+                          <li
+                            key={item}
+                            style={{
+                              fontSize: 13,
+                              color: 'var(--text-dark)',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: 'var(--text-dark)',
+                          lineHeight: 1.6,
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {content || 'No detail returned.'}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: 24,
+                  textAlign: 'center',
+                  borderRadius: 12,
+                  background: '#fff',
+                  border: '1px dashed var(--border)',
+                }}
+              >
+                <p style={{ fontSize: 28, marginBottom: 8 }}>✦</p>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--text-muted)',
+                    fontWeight: 700,
+                  }}
+                >
+                  No vacancy analysis generated yet.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
