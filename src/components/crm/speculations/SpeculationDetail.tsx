@@ -117,6 +117,13 @@ function getCandidateCvDocument(documents: any[]) {
   )
 }
 
+function isOldOpportunity(item: any) {
+  return (
+    item.opportunity_status === 'old' ||
+    Boolean(item.archived_at)
+  )
+}
+
 export default function SpeculationDetail({
   speculation: initialSpeculation,
   notes: initialNotes,
@@ -368,6 +375,10 @@ const [activeTab, setActiveTab] = useState<
 >('overview')
 
   const candidate = normaliseRelation(speculation.candidates)
+
+  const activeOutreach = specOutreach.filter((item: any) => !isOldOpportunity(item))
+  const oldOutreach = specOutreach.filter((item: any) => isOldOpportunity(item))
+
   const nearbyProviderRows = useMemo(() => {
   const candidateLat = candidateLocation.lat
   const candidateLng = candidateLocation.lng
@@ -1450,6 +1461,80 @@ async function updateOutreachStatus(outreachId: string, status: string) {
   setUpdatingOutreachId(null)
 }
 
+async function archiveOutreachOpportunity(outreachId: string, employerName?: string) {
+  const reason = window.prompt(
+    `Move ${employerName || 'this employer'} to old opportunities? Optional reason:`,
+    '',
+  )
+
+  if (reason === null) return
+
+  setUpdatingOutreachId(outreachId)
+
+  const res = await fetch('/api/crm/speculations', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'archive_outreach_opportunity',
+      outreach_id: outreachId,
+      reason: reason.trim(),
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(data?.error || 'Could not move opportunity to old opportunities.')
+    setUpdatingOutreachId(null)
+    return
+  }
+
+  if (data.outreach) {
+    setSpecOutreach((current: any[]) =>
+      current.map(item => (item.id === outreachId ? data.outreach : item)),
+    )
+  }
+
+  if (data.note) {
+    setSpeculationNotes(current => [data.note, ...current])
+  }
+
+  setUpdatingOutreachId(null)
+}
+
+async function restoreOutreachOpportunity(outreachId: string) {
+  setUpdatingOutreachId(outreachId)
+
+  const res = await fetch('/api/crm/speculations', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'restore_outreach_opportunity',
+      outreach_id: outreachId,
+    }),
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    alert(data?.error || 'Could not restore opportunity.')
+    setUpdatingOutreachId(null)
+    return
+  }
+
+  if (data.outreach) {
+    setSpecOutreach((current: any[]) =>
+      current.map(item => (item.id === outreachId ? data.outreach : item)),
+    )
+  }
+
+  if (data.note) {
+    setSpeculationNotes(current => [data.note, ...current])
+  }
+
+  setUpdatingOutreachId(null)
+}
+
 async function addTask() {
   if (!taskTitle.trim()) return
 
@@ -1913,7 +1998,7 @@ async function convertTargetToLead(targetId: string) {
         {[
   { id: 'overview', label: '◈ Overview' },
   { id: 'profile', label: '📄 Candidate profile' },
-  { id: 'targets', label: `Employers contacted (${specOutreach.length})` },
+  { id: 'targets', label: `Employers contacted (${activeOutreach.length})` },
   { id: 'nearby', label: `📍 Nearby providers (${nearbyProviderRows.length})` },
   { id: 'notes', label: `📝 Notes (${speculationNotes.length})` },
   { id: 'tasks', label: `✅ Tasks (${speculationTasks.length})` },
@@ -2875,18 +2960,18 @@ async function convertTargetToLead(targetId: string) {
           </div>
 
           <span className="crm-badge crm-badge-blue">
-            {specOutreach.length}
-          </span>
+  {activeOutreach.length}
+</span>
         </div>
 
-        {specOutreach.length === 0 && (
+        {activeOutreach.length === 0 && (
           <p className="crm-empty">
             No employers contacted yet. Log your first approach on the left.
           </p>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {specOutreach.map((item: any) => {
+          {activeOutreach.map((item: any) => {
             const statusLabel =
               OUTREACH_STATUSES.find(status => status.id === item.status)?.label ||
               String(item.status || 'not contacted').replace(/_/g, ' ')
@@ -3055,6 +3140,20 @@ async function convertTargetToLead(targetId: string) {
       ? 'Drafting...'
       : 'Draft spec email'}
   </button>
+
+  <button
+  type="button"
+  className="crm-btn-ghost crm-btn-sm"
+  onClick={() => archiveOutreachOpportunity(item.id, item.employer_name)}
+  disabled={updatingOutreachId === item.id}
+  style={{
+    borderColor: '#fecaca',
+    color: '#dc2626',
+    background: '#fff',
+  }}
+>
+  Opportunity gone
+</button>
 </div>
                   <span
                     className="crm-badge"
@@ -3303,6 +3402,158 @@ async function convertTargetToLead(targetId: string) {
             )
           })}
         </div>
+        {oldOutreach.length > 0 && (
+  <div className="crm-card">
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        alignItems: 'center',
+        marginBottom: 12,
+      }}
+    >
+      <div>
+        <h2 className="crm-card-title">Old opportunities</h2>
+        <p
+          style={{
+            margin: 0,
+            marginTop: 3,
+            fontSize: 12,
+            color: 'var(--text-muted)',
+          }}
+        >
+          Opportunities that have gone, are no longer live, or are not worth actively chasing.
+        </p>
+      </div>
+
+      <span className="crm-badge" style={{ background: '#f0f0f2', color: '#737373' }}>
+        {oldOutreach.length}
+      </span>
+    </div>
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {oldOutreach.map((item: any) => {
+        const statusLabel =
+          OUTREACH_STATUSES.find(status => status.id === item.status)?.label ||
+          String(item.status || 'not contacted').replace(/_/g, ' ')
+
+        return (
+          <article
+            key={item.id}
+            style={{
+              border: '1px solid var(--border-light)',
+              borderRadius: 14,
+              padding: 14,
+              background: '#fafafa',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                alignItems: 'flex-start',
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    fontWeight: 900,
+                    color: 'var(--text-dark)',
+                  }}
+                >
+                  {item.employer_name}
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {[
+                    item.contact_name,
+                    item.contact_title,
+                    item.region,
+                    item.postcode,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'No contact/location details recorded'}
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Moved to old opportunities {item.archived_at ? formatDate(item.archived_at) : ''}
+                  {item.archived_reason ? ` · ${item.archived_reason}` : ''}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="crm-btn-ghost crm-btn-sm"
+                onClick={() => restoreOutreachOpportunity(item.id)}
+                disabled={updatingOutreachId === item.id}
+              >
+                Restore
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                flexWrap: 'wrap',
+                marginTop: 10,
+              }}
+            >
+              <span
+                className="crm-badge"
+                style={{ background: '#f0f0f2', color: '#737373' }}
+              >
+                Old opportunity
+              </span>
+
+              <span
+                className="crm-badge"
+                style={{ background: '#fffbeb', color: '#d97706' }}
+              >
+                {statusLabel}
+              </span>
+
+              {item.website && (
+                <a
+                  href={item.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="crm-badge"
+                  style={{
+                    background: '#f0f0f2',
+                    color: '#737373',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Website ↗
+                </a>
+              )}
+            </div>
+          </article>
+        )
+      })}
+    </div>
+  </div>
+)}
       </div>
     </div>
   </div>
