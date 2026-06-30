@@ -1475,10 +1475,11 @@ async function archiveOutreachOpportunity(outreachId: string, employerName?: str
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action: 'archive_outreach_opportunity',
-      outreach_id: outreachId,
-      reason: reason.trim(),
-    }),
+  action: 'archive_outreach_opportunity',
+  speculation_id: speculation.id,
+  outreach_id: outreachId,
+  reason: reason.trim(),
+}),
   })
 
   const data = await res.json().catch(() => null)
@@ -1509,9 +1510,10 @@ async function restoreOutreachOpportunity(outreachId: string) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action: 'restore_outreach_opportunity',
-      outreach_id: outreachId,
-    }),
+  action: 'restore_outreach_opportunity',
+  speculation_id: speculation.id,
+  outreach_id: outreachId,
+}),
   })
 
   const data = await res.json().catch(() => null)
