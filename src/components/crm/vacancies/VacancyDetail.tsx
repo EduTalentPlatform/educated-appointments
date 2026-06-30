@@ -2833,16 +2833,30 @@ const filteredCandidateOptions = useMemo(() => {
                 </p>
               </div>
 
-              <button
-                type="button"
-                className="crm-btn-ai"
-                onClick={generateVacancyAnalysis}
-                disabled={generatingVacancyAnalysis}
-              >
-                {generatingVacancyAnalysis
-                  ? '✦ Analysing...'
-                  : '✦ Analyse vacancy'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+  <button
+    type="button"
+    className="crm-btn-ai"
+    onClick={generateVacancyAnalysis}
+    disabled={generatingVacancyAnalysis}
+  >
+    {generatingVacancyAnalysis
+      ? '✦ Analysing...'
+      : vacancyAnalysis
+        ? '✦ Regenerate analysis'
+        : '✦ Analyse vacancy'}
+  </button>
+
+  {vacancyAnalysis && (
+    <a
+      href={`/api/crm/vacancies/${vacancy.id}/vacancy-analysis/pdf`}
+      className="crm-btn-primary"
+      style={{ textDecoration: 'none' }}
+    >
+      Download PDF
+    </a>
+  )}
+</div>
             </div>
 
             {vacancyAnalysisError && (
