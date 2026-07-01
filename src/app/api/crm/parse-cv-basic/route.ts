@@ -6,16 +6,18 @@ export const dynamic = 'force-dynamic'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
-const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'docx', 'txt'])
+const ALLOWED_FILE_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'txt'])
 
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
+  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
 ])
 
 const require = createRequire(import.meta.url)
 const pdfParse = require('pdf-parse/lib/pdf-parse.js')
+const WordExtractor = require('word-extractor')
 
 function getFileExtension(fileName: string) {
   const parts = String(fileName || '').toLowerCase().split('.')
@@ -201,6 +203,13 @@ async function extractDocxText(buffer: Buffer) {
   return cleanText(result.value || '')
 }
 
+async function extractDocText(buffer: Buffer) {
+  const extractor = new WordExtractor()
+  const document = await extractor.extract(buffer)
+
+  return cleanText(document?.getBody?.() || '')
+}
+
 function extractTxtText(buffer: Buffer) {
   return cleanText(buffer.toString('utf8'))
 }
@@ -213,17 +222,24 @@ async function extractTextFromFile(file: File) {
   const fileType = file.type.toLowerCase()
 
   if (fileName.endsWith('.pdf') || fileType.includes('pdf')) {
-    return extractPdfText(buffer)
-  }
+  return extractPdfText(buffer)
+}
 
-  if (
-    fileName.endsWith('.docx') ||
-    fileType.includes(
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    )
-  ) {
-    return extractDocxText(buffer)
-  }
+if (
+  fileName.endsWith('.doc') ||
+  fileType.includes('application/msword')
+) {
+  return extractDocText(buffer)
+}
+
+if (
+  fileName.endsWith('.docx') ||
+  fileType.includes(
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  )
+) {
+  return extractDocxText(buffer)
+}
 
   if (fileName.endsWith('.txt') || fileType.includes('text/plain')) {
     return extractTxtText(buffer)
@@ -273,7 +289,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Unsupported file type. Please upload a PDF, DOCX or TXT file.',
+  'Unsupported file type. Please upload a PDF, DOC, DOCX or TXT file.',
         },
         { status: 400 },
       )
