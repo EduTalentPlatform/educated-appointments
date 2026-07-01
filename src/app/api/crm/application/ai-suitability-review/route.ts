@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createRequire } from 'module'
 import { createClient } from '@supabase/supabase-js'
 import { callAIJson } from '@/lib/ai-client'
 
@@ -7,6 +8,9 @@ export const runtime = 'nodejs'
 const MAX_SOURCE_CHARS_FOR_SUMMARY = 60000
 const MAX_REVIEW_EXTRA_CHARS = 8000
 const MAX_OUTPUT_TOKENS = 1200
+
+const require = createRequire(import.meta.url)
+const WordExtractor = require('word-extractor')
 
 type SummaryJson = {
   summary: string
@@ -277,6 +281,13 @@ async function extractDocxTextFromBuffer(buffer: Buffer) {
   return cleanText(result.value || '')
 }
 
+async function extractDocTextFromBuffer(buffer: Buffer) {
+  const extractor = new WordExtractor()
+  const document = await extractor.extract(buffer)
+
+  return cleanText(document?.getBody?.() || '')
+}
+
 function getDocumentExtension(doc: any) {
   const candidates = [doc?.name, doc?.storage_path, doc?.file_url]
 
@@ -387,15 +398,8 @@ async function extractTextFromStoredFile({
   }
 
   if (extension === 'doc') {
-    console.warn(
-      'Old .doc files are not currently supported for AI suitability extraction. Please upload as .docx, PDF or TXT.',
-      {
-        document_id: doc?.id,
-        document_name: doc?.name,
-      },
-    )
-    return ''
-  }
+  return extractDocTextFromBuffer(buffer)
+}
 
   return extractPdfWithAnthropicFromBuffer(buffer)
 }
