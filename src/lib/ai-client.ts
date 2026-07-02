@@ -168,9 +168,12 @@ function resolveProvider(options: RequiredResolvedOptions): AIProvider {
     if (options.provider === 'anthropic' && hasAnthropicKey()) return 'anthropic'
   }
 
-  // For now, keep web search on Claude because the current CRM already uses
-  // Anthropic web search patterns.
-  if (options.useWebSearch) {
+  // Prefer OpenAI for web search when available to keep BD search costs down.
+  if (options.useWebSearch && hasOpenAIKey()) {
+    return 'openai'
+  }
+
+  if (options.useWebSearch && hasAnthropicKey()) {
     return 'anthropic'
   }
 
@@ -366,6 +369,20 @@ async function callOpenAI(
       },
     ],
     max_output_tokens: options.maxTokens,
+  }
+
+  if (options.useWebSearch) {
+    body.tools = [
+      {
+        type: 'web_search',
+        search_context_size: 'low',
+        user_location: {
+          type: 'approximate',
+          country: 'GB',
+        },
+      },
+    ]
+    body.tool_choice = 'required'
   }
 
   // Some OpenAI models accept temperature, some do not. Add it first, and if

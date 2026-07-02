@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { callAI } from '@/lib/ai-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -399,12 +400,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one role is required.' }, { status: 400 })
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-
-    if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY is missing.' }, { status: 500 })
-    }
-
     const today = new Date().toISOString().split('T')[0]
     const cutoffDate = new Date(Date.now() - maxDaysAgo * 86400000).toISOString().split('T')[0]
 
@@ -523,35 +518,29 @@ Return ONLY this exact JSON object shape:
   ]
 }`
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05',
+    const aiResult = await callAI(prompt, {
+      provider: 'openai',
+      model:
+        process.env.OPENAI_WEB_SEARCH_MODEL ||
+        process.env.OPENAI_LOW_COST_MODEL ||
+        process.env.OPENAI_MODEL ||
+        'gpt-4.1-mini',
+      useWebSearch: true,
+      taskType: 'web_search',
+      route: 'crm/leads/job-search',
+      maxTokens: 12000,
+      temperature: 0.2,
+      autoContinue: false,
+      metadata: {
+        roles,
+        regions,
+        max_days_ago: maxDaysAgo,
+        extra_keywords: extraKeywords || null,
+        has_search_notes: Boolean(searchNotes),
       },
-      body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-        max_tokens: 12000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }],
-      }),
     })
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: data?.error?.message || 'AI search failed.' },
-        { status: 502 },
-      )
-    }
-
-    const text = (data.content || [])
-      .map((part: any) => (part.type === 'text' ? part.text : ''))
-      .join('\n')
-      .trim()
+    const text = aiResult.text?.trim()
 
     if (!text) {
       return NextResponse.json({ error: 'No results returned.' }, { status: 502 })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { callAI } from '@/lib/ai-client'
 import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
@@ -262,44 +263,31 @@ function findBestCompanyMatch(
   return null
 }
 
-async function callAnthropic(prompt: string, useWebSearch = false) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+async function callOpenAI(prompt: string, useWebSearch = false) {
+  const model =
+    (useWebSearch
+      ? process.env.OPENAI_WEB_SEARCH_MODEL
+      : process.env.OPENAI_LOW_COST_MODEL) ||
+    process.env.OPENAI_MODEL ||
+    'gpt-4.1-mini'
 
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is missing.')
-  }
-
-  const body: any = {
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-    max_tokens: useWebSearch ? 6000 : 3000,
-    messages: [{ role: 'user', content: prompt }],
-  }
-
-  if (useWebSearch) {
-    body.tools = [{ type: 'web_search_20250305', name: 'web_search' }]
-  }
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      ...(useWebSearch ? { 'anthropic-beta': 'web-search-2025-03-05' } : {}),
+  const result = await callAI(prompt, {
+    provider: 'openai',
+    model,
+    useWebSearch,
+    taskType: useWebSearch ? 'web_search' : 'outreach',
+    route: useWebSearch
+      ? 'crm/leads/job-search/find-contacts'
+      : 'crm/leads/job-search/generate-email',
+    maxTokens: useWebSearch ? 6000 : 3000,
+    temperature: useWebSearch ? 0.2 : 0.7,
+    autoContinue: false,
+    metadata: {
+      use_web_search: useWebSearch,
     },
-    body: JSON.stringify(body),
   })
 
-  const data = await res.json()
-
-  if (!res.ok) {
-    throw new Error(data?.error?.message || 'AI request failed.')
-  }
-
-  const text = (data.content || [])
-    .map((part: any) => (part.type === 'text' ? part.text : ''))
-    .join('\n')
-    .trim()
+  const text = result.text?.trim()
 
   if (!text) {
     throw new Error('No AI response returned.')
@@ -461,7 +449,7 @@ Return exactly:
   "body": "Email body here"
 }`
 
-  const text = await callAnthropic(prompt, false)
+  const text = await callOpenAI(prompt, false)
   const parsed = parseJsonFromAi(text)
 
   return NextResponse.json({
@@ -564,7 +552,7 @@ Return exactly:
   ]
 }`
 
-  const text = await callAnthropic(prompt, true)
+  const text = await callOpenAI(prompt, true)
   const parsed = parseJsonFromAi(text)
 
   const contacts = Array.isArray(parsed.contacts)
