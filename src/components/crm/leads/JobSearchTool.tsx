@@ -772,7 +772,7 @@ export default function JobSearchTool() {
       )}
 
       {jobs.length > 0 && (
-        <div className="crm-card crm-table-card">
+        <div className="crm-card crm-table-card" style={{ overflowX: 'auto' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
             <h2 className="crm-card-title" style={{ flex: 1 }}>
               {filteredJobs.length} result{filteredJobs.length !== 1 ? 's' : ''}
@@ -802,7 +802,7 @@ export default function JobSearchTool() {
             )}
           </div>
 
-          <table className="crm-table">
+          <table className="crm-table" style={{ minWidth: 1280 }}>
             <thead>
               <tr>
                 <th>Role</th>
