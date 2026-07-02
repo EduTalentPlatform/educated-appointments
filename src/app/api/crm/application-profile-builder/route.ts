@@ -116,45 +116,73 @@ function buildDocumentEvidence(documents: any[], maxLength = 18000) {
   return safeText(text, maxLength)
 }
 
-async function runClaude(prompt: string) {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is missing.')
+function extractOpenAIText(data: any) {
+  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
+    return data.output_text.trim()
   }
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const output = Array.isArray(data?.output) ? data.output : []
+
+  const text = output
+    .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
+    .map((part: any) => {
+      if (part?.type === 'output_text') return part.text || ''
+      if (part?.type === 'text') return part.text || ''
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+
+  return text
+}
+
+async function runOpenAI(prompt: string) {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is missing.')
+  }
+
+  const model =
+    process.env.OPENAI_PROFILE_BUILDER_MODEL ||
+    process.env.OPENAI_MODEL ||
+    'gpt-4o-mini'
+
+  const systemPrompt =
+    'You are a UK recruitment consultant at Educated Appointments writing a candidate summary to a client. Write like a real recruiter: clear, direct, professional and human. Use British English. Accuracy is more important than persuasion. Do not invent facts, do not exaggerate, and do not turn transferable skills into direct experience.'
+
+  const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-      max_tokens: 3200,
-      temperature: 0.1,
-      system:
-        'You are a UK recruitment consultant at Educated Appointments writing a candidate summary to a client. Write like a real recruiter: clear, direct, professional and human. Use British English. Accuracy is more important than persuasion. Do not invent facts, do not exaggerate, and do not turn transferable skills into direct experience.',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      model,
+      instructions: systemPrompt,
+      input: prompt,
+      max_output_tokens: 3200,
     }),
   })
 
   const data = await res.json()
 
   if (!res.ok) {
-    throw new Error(data?.error?.message || 'Claude profile generation failed.')
+    throw new Error(
+      data?.error?.message ||
+        data?.message ||
+        'OpenAI profile generation failed.',
+    )
   }
 
-  return (data.content || [])
-    .map((part: any) => (part.type === 'text' ? part.text : ''))
-    .join('\n')
-    .trim()
+  const text = extractOpenAIText(data)
+
+  if (!text) {
+    throw new Error('OpenAI returned an empty profile response.')
+  }
+
+  return text
 }
 
 export async function POST(request: NextRequest) {
@@ -172,7 +200,7 @@ export async function POST(request: NextRequest) {
     )
     const anonymous = Boolean(body.anonymous)
 
-        const candidateDocuments = Array.isArray(body.candidate_documents)
+    const candidateDocuments = Array.isArray(body.candidate_documents)
       ? body.candidate_documents
       : []
 
@@ -283,7 +311,7 @@ The profile must follow this exact structure and tone:
 
 Hi ${employerName},
 
-Please find below a summary of ${candidateName}, a/an [short professional description matched to the vacancy, employer and sector, but only using evidenced information].
+Please find below a summary of ${candidateName}, [write a short professional description matched to the vacancy, employer and sector, but only using evidenced information].
 
 Location: ${location}
 Notice Period: ${noticePeriod}
@@ -341,7 +369,7 @@ Final check before writing:
 - Do not include this final check in the output.
 `
 
-    const profile = await runClaude(prompt)
+    const profile = await runOpenAI(prompt)
 
     return NextResponse.json({
       profile,
