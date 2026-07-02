@@ -275,6 +275,7 @@ async function callOpenAI(prompt: string, useWebSearch = false) {
     provider: 'openai',
     model,
     useWebSearch,
+    webSearchContextSize: useWebSearch ? 'medium' : 'low',
     taskType: useWebSearch ? 'web_search' : 'outreach',
     route: useWebSearch
       ? 'crm/leads/job-search/find-contacts'

@@ -21,6 +21,7 @@ type AIOptions = {
   maxTokens?: number
   temperature?: number
   useWebSearch?: boolean
+  webSearchContextSize?: 'low' | 'medium' | 'high'
   system?: string
   autoContinue?: boolean
   maxContinuations?: number
@@ -216,6 +217,7 @@ type RequiredResolvedOptions = Required<
     | 'taskType'
     | 'cachePrompt'
     | 'logUsage'
+    | 'webSearchContextSize'
   >
 > &
   Pick<AIOptions, 'provider' | 'model' | 'route' | 'metadata'>
@@ -375,7 +377,7 @@ async function callOpenAI(
     body.tools = [
       {
         type: 'web_search',
-        search_context_size: 'low',
+        search_context_size: options.webSearchContextSize,
         user_location: {
           type: 'approximate',
           country: 'GB',
@@ -527,6 +529,7 @@ export async function callAI(
     route: options.route,
     metadata: options.metadata,
     logUsage: options.logUsage ?? true,
+    webSearchContextSize: options.webSearchContextSize ?? 'low',
   }
 
   let selectedProvider: AIProvider | undefined

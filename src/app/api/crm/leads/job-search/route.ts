@@ -526,6 +526,7 @@ Return ONLY this exact JSON object shape:
         process.env.OPENAI_MODEL ||
         'gpt-4.1-mini',
       useWebSearch: true,
+      webSearchContextSize: 'high',
       taskType: 'web_search',
       route: 'crm/leads/job-search',
       maxTokens: 12000,
