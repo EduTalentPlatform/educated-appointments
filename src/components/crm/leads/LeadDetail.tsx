@@ -287,17 +287,30 @@ export default function LeadDetail({
   const [savingActivityEdit, setSavingActivityEdit] = useState(false)
 
   // Contact state
-  const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState({
-    name: '',
-    title: '',
-    email: '',
-    phone: '',
-    linkedin: '',
-    role_type: 'Day-to-day',
-    is_primary: false,
-  })
-  const [addingContact, setAddingContact] = useState(false)
+const [showContactForm, setShowContactForm] = useState(false)
+const [contactForm, setContactForm] = useState({
+  name: '',
+  title: '',
+  email: '',
+  phone: '',
+  linkedin: '',
+  role_type: 'Day-to-day',
+  is_primary: false,
+})
+const [addingContact, setAddingContact] = useState(false)
+
+// Edit contact state
+const [editingContact, setEditingContact] = useState<Contact | null>(null)
+const [editContactForm, setEditContactForm] = useState({
+  name: '',
+  title: '',
+  email: '',
+  phone: '',
+  linkedin: '',
+  role_type: 'Day-to-day',
+  is_primary: false,
+})
+const [savingContactEdit, setSavingContactEdit] = useState(false)
 
   // Provider sites state
   const [showSiteForm, setShowSiteForm] = useState(false)
@@ -715,6 +728,101 @@ const hasVisibleContactInfo = Boolean(leadLevelContact) || contacts.length > 0
     setAddingContact(false)
   }
 
+  function startEditContact(contact: Contact) {
+  setEditingContact(contact)
+  setEditContactForm({
+    name: contact.name || '',
+    title: contact.title || '',
+    email: contact.email || '',
+    phone: contact.phone || '',
+    linkedin: contact.linkedin || '',
+    role_type: contact.role_type || 'Day-to-day',
+    is_primary: Boolean(contact.is_primary),
+  })
+}
+
+async function saveEditedContact(e: FormEvent) {
+  e.preventDefault()
+
+  if (!editingContact) return
+
+  if (!editContactForm.name.trim()) {
+    alert('Contact name is required.')
+    return
+  }
+
+  setSavingContactEdit(true)
+
+  if (editContactForm.is_primary) {
+    const { error: primaryError } = await supabase
+      .from('lead_contacts')
+      .update({ is_primary: false })
+      .eq('lead_id', lead.id)
+      .neq('id', editingContact.id)
+
+    if (primaryError) {
+      alert(primaryError.message || 'Could not update primary contact.')
+      setSavingContactEdit(false)
+      return
+    }
+  }
+
+  const payload = {
+    name: editContactForm.name.trim(),
+    title: editContactForm.title || null,
+    email: editContactForm.email || null,
+    phone: editContactForm.phone || null,
+    linkedin: editContactForm.linkedin || null,
+    role_type: editContactForm.role_type || 'Day-to-day',
+    is_primary: editContactForm.is_primary,
+  }
+
+  const { data, error } = await supabase
+    .from('lead_contacts')
+    .update(payload)
+    .eq('id', editingContact.id)
+    .eq('lead_id', lead.id)
+    .select()
+    .single()
+
+  if (error) {
+    alert(error.message || 'Could not save contact.')
+    setSavingContactEdit(false)
+    return
+  }
+
+  if (data) {
+    setContacts(current =>
+      current.map(contact => {
+        if (contact.id === data.id) return data
+        if (data.is_primary) return { ...contact, is_primary: false }
+        return contact
+      }),
+    )
+
+    setActivities(current =>
+      current.map(activity =>
+        activity.contact_id === data.id && activity.lead_contacts
+          ? {
+              ...activity,
+              lead_contacts: {
+                ...activity.lead_contacts,
+                name: data.name,
+                title: data.title,
+                email: data.email,
+                phone: data.phone,
+              },
+            }
+          : activity,
+      ),
+    )
+
+    setEditingContact(null)
+  }
+
+  setSavingContactEdit(false)
+}
+  
   async function deleteContact(id: string) {
     const confirmed = window.confirm('Delete this contact?')
     if (!confirmed) return
@@ -1908,26 +2016,35 @@ const hasVisibleContactInfo = Boolean(leadLevelContact) || contacts.length > 0
         </div>
 
         <div className="ld-contact-actions">
-          {!contact.is_primary && (
-            <button
-              type="button"
-              className="crm-icon-btn"
-              onClick={() => setPrimaryContact(contact.id)}
-              title="Set as primary"
-            >
-              ★
-            </button>
-          )}
+  <button
+    type="button"
+    className="crm-icon-btn"
+    onClick={() => startEditContact(contact)}
+    title="Edit contact"
+  >
+    ✎
+  </button>
 
-          <button
-            type="button"
-            className="crm-icon-btn crm-icon-btn-danger"
-            onClick={() => deleteContact(contact.id)}
-            title="Delete"
-          >
-            ✕
-          </button>
-        </div>
+  {!contact.is_primary && (
+    <button
+      type="button"
+      className="crm-icon-btn"
+      onClick={() => setPrimaryContact(contact.id)}
+      title="Set as primary"
+    >
+      ★
+    </button>
+  )}
+
+  <button
+    type="button"
+    className="crm-icon-btn crm-icon-btn-danger"
+    onClick={() => deleteContact(contact.id)}
+    title="Delete"
+  >
+    ✕
+  </button>
+</div>
       </div>
 
       <div className="ld-contact-links" style={{ marginTop: 12 }}>
@@ -2811,6 +2928,171 @@ const hasVisibleContactInfo = Boolean(leadLevelContact) || contacts.length > 0
         </div>
       </div>
 
+      {/* EDIT CONTACT MODAL */}
+{editingContact && (
+  <>
+    <div
+      className="crm-modal-backdrop"
+      onClick={() => setEditingContact(null)}
+    />
+
+    <div className="crm-modal">
+      <div className="crm-modal-header">
+        <h2 className="crm-modal-title">Edit contact</h2>
+
+        <button
+          type="button"
+          className="crm-modal-close"
+          onClick={() => setEditingContact(null)}
+        >
+          ✕
+        </button>
+      </div>
+
+      <form onSubmit={saveEditedContact} className="crm-modal-form">
+        <div className="crm-form-row">
+          <div className="crm-field">
+            <label className="crm-label">Name *</label>
+            <input
+              className="crm-input"
+              required
+              value={editContactForm.name}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  name: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <div className="crm-field">
+            <label className="crm-label">Title</label>
+            <input
+              className="crm-input"
+              value={editContactForm.title}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  title: event.target.value,
+                }))
+              }
+            />
+          </div>
+        </div>
+
+        <div className="crm-form-row">
+          <div className="crm-field">
+            <label className="crm-label">Email</label>
+            <input
+              className="crm-input"
+              type="email"
+              value={editContactForm.email}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  email: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <div className="crm-field">
+            <label className="crm-label">Phone</label>
+            <input
+              className="crm-input"
+              value={editContactForm.phone}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  phone: event.target.value,
+                }))
+              }
+            />
+          </div>
+        </div>
+
+        <div className="crm-form-row">
+          <div className="crm-field">
+            <label className="crm-label">LinkedIn</label>
+            <input
+              className="crm-input"
+              value={editContactForm.linkedin}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  linkedin: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <div className="crm-field">
+            <label className="crm-label">Role type</label>
+            <select
+              className="crm-select"
+              value={editContactForm.role_type}
+              onChange={event =>
+                setEditContactForm(form => ({
+                  ...form,
+                  role_type: event.target.value,
+                }))
+              }
+            >
+              {ROLE_TYPES.map(role => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            marginBottom: 10,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={editContactForm.is_primary}
+            onChange={event =>
+              setEditContactForm(form => ({
+                ...form,
+                is_primary: event.target.checked,
+              }))
+            }
+          />
+          Primary contact
+        </label>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="crm-btn-ghost crm-btn-sm"
+            onClick={() => setEditingContact(null)}
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            className="crm-btn-primary crm-btn-sm"
+            disabled={savingContactEdit}
+          >
+            {savingContactEdit ? 'Saving...' : 'Save contact'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </>
+)}
+      
       {/* EDIT ACTIVITY MODAL */}
       {editingActivity && (
         <>
