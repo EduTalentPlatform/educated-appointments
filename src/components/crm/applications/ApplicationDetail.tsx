@@ -567,6 +567,8 @@ const INTERVIEW_FORMATS = [
   { value: 'telephone', label: 'Telephone' },
 ]
 
+const CLIENT_INTERVIEW_CANCELLED_OUTCOME = 'Cancelled'
+
 const CLIENT_INTERVIEW_OUTCOMES = [
   '',
   'Awaiting feedback',
@@ -574,7 +576,25 @@ const CLIENT_INTERVIEW_OUTCOMES = [
   'Offer to be made',
   'Not successful',
   'Withdrawn',
+  CLIENT_INTERVIEW_CANCELLED_OUTCOME,
 ]
+
+const PROTECTED_APPLICATION_STATUSES = [
+  'offer',
+  'placed',
+  'rejected',
+  'not_interested',
+  'withdrawn',
+]
+
+function isClientInterviewCancelled(
+  interview?: { outcome?: string | null } | null,
+) {
+  return (
+    String(interview?.outcome || '').trim().toLowerCase() ===
+    CLIENT_INTERVIEW_CANCELLED_OUTCOME.toLowerCase()
+  )
+}
 
 type SecureDocument = {
   id: string
@@ -712,8 +732,10 @@ const [switchRoleError, setSwitchRoleError] = useState<string | null>(null)
   const [interviews, setInterviews] =
     useState<ApplicationInterview[]>(applicationInterviews)
   const [savingClientInterview, setSavingClientInterview] = useState(false)
-  const [clientInterviewSaved, setClientInterviewSaved] = useState(false)
-  const [clientEmailCopied, setClientEmailCopied] = useState(false)
+const [clientInterviewSaved, setClientInterviewSaved] = useState(false)
+const [cancellingClientInterview, setCancellingClientInterview] = useState(false)
+const [clientInterviewCancelled, setClientInterviewCancelled] = useState(false)
+const [clientEmailCopied, setClientEmailCopied] = useState(false)
 
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
 const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false)
@@ -1178,8 +1200,14 @@ const [savingPortalCandidateFacts, setSavingPortalCandidateFacts] =
   null
 
   const latestClientInterview = useMemo(() => {
-    return interviews.find(item => item.interview_type === 'client') || null
-  }, [interviews])
+  return (
+    interviews.find(
+      item =>
+        item.interview_type === 'client' &&
+        !isClientInterviewCancelled(item),
+    ) || null
+  )
+}, [interviews])
 
   const [clientInterviewForm, setClientInterviewForm] =
     useState<ClientInterviewForm>(() =>
@@ -2159,35 +2187,51 @@ Kind regards,`
   }))
 }
 
-  async function saveClientInterview() {
-    setSavingClientInterview(true)
+function buildClientInterviewPayload(
+  overrides: Partial<ClientInterviewForm> = {},
+) {
+  const form = {
+    ...clientInterviewForm,
+    ...overrides,
+  }
 
-    const selectedContacts = selectedEmployerContacts
+  const selectedContacts = clientContacts.filter(contact =>
+    form.employer_contact_ids.includes(contact.id),
+  )
 
-    const payload = {
-      id: clientInterviewForm.id || undefined,
-      application_id: app.id,
-      interview_type: 'client',
+  const cancelled = isClientInterviewCancelled(form)
 
-      stage_number: clientInterviewForm.stage_number
-        ? Number(clientInterviewForm.stage_number)
-        : null,
-      interview_date: clientInterviewForm.interview_date || null,
-      interview_time: clientInterviewForm.interview_time || null,
-      interview_format: clientInterviewForm.interview_format || null,
-      location: clientInterviewForm.location || null,
-      instructions: clientInterviewForm.instructions || null,
+  return {
+    id: form.id || undefined,
+    application_id: app.id,
+    interview_type: 'client',
 
-      employer_contact_ids: clientInterviewForm.employer_contact_ids,
-      employer_contact_names: selectedContacts.map(getContactDisplayName),
-      employer_contact_job_titles: selectedContacts.map(getContactJobTitle),
+    stage_number: form.stage_number ? Number(form.stage_number) : null,
+    interview_date: form.interview_date || null,
+    interview_time: form.interview_time || null,
+    interview_format: form.interview_format || null,
+    location: form.location || null,
+    instructions: form.instructions || null,
 
-      confirmation_email: clientInterviewForm.confirmation_email || null,
-      feedback: clientInterviewForm.feedback || null,
-      outcome: clientInterviewForm.outcome || null,
-      counts_for_interview_to_fill:
-        clientInterviewForm.counts_for_interview_to_fill,
-    }
+    employer_contact_ids: form.employer_contact_ids,
+    employer_contact_names: selectedContacts.map(getContactDisplayName),
+    employer_contact_job_titles: selectedContacts.map(getContactJobTitle),
+
+    confirmation_email: form.confirmation_email || null,
+    feedback: form.feedback || null,
+    outcome: form.outcome || null,
+    counts_for_interview_to_fill: cancelled
+      ? false
+      : form.counts_for_interview_to_fill,
+  }
+}
+
+async function saveClientInterview() {
+  setSavingClientInterview(true)
+  setClientInterviewCancelled(false)
+
+  try {
+    const payload = buildClientInterviewPayload()
 
     const res = await fetch('/api/crm/application-interviews', {
       method: 'POST',
@@ -2195,39 +2239,192 @@ Kind regards,`
       body: JSON.stringify(payload),
     })
 
-    const json = await res.json()
+    const json = await res.json().catch(() => null)
 
-    if (res.ok && json.data) {
-      setClientInterviewForm(clientInterviewToForm(json.data))
-
-      setInterviews(current => {
-        const exists = current.some(item => item.id === json.data.id)
-        if (exists) {
-          return current.map(item => (item.id === json.data.id ? json.data : item))
-        }
-
-        return [json.data, ...current]
-      })
-
-      await patchApp({
-  status: app.status === 'placed' ? app.status : 'client_interview',
-  client_interview_date: json.data.interview_date,
-  client_interview_time: json.data.interview_time,
-  client_interview_format: json.data.interview_format,
-  client_interview_location: json.data.location,
-  client_interview_notes: json.data.instructions,
-  client_interview_feedback: json.data.feedback,
-  client_interview_outcome: json.data.outcome,
-})
-
-      setClientInterviewSaved(true)
-      setTimeout(() => setClientInterviewSaved(false), 2000)
-    } else {
-      alert(json.error || 'Could not save client interview.')
+    if (!res.ok || !json?.data) {
+      throw new Error(json?.error || 'Could not save client interview.')
     }
 
+    const savedInterview = json.data as ApplicationInterview
+    const savedIsCancelled = isClientInterviewCancelled(savedInterview)
+
+    setClientInterviewForm(
+      savedIsCancelled
+        ? clientInterviewToForm(null)
+        : clientInterviewToForm(savedInterview),
+    )
+
+    setInterviews(current => {
+      const exists = current.some(item => item.id === savedInterview.id)
+
+      if (exists) {
+        return current.map(item =>
+          item.id === savedInterview.id ? savedInterview : item,
+        )
+      }
+
+      return [savedInterview, ...current]
+    })
+
+    const nextStatus = savedIsCancelled
+      ? PROTECTED_APPLICATION_STATUSES.includes(app.status)
+        ? app.status
+        : 'submitted'
+      : PROTECTED_APPLICATION_STATUSES.includes(app.status)
+        ? app.status
+        : 'client_interview'
+
+    await patchApp({
+      status: nextStatus,
+      client_interview_date: savedIsCancelled
+        ? null
+        : savedInterview.interview_date,
+      client_interview_time: savedIsCancelled
+        ? null
+        : savedInterview.interview_time,
+      client_interview_format: savedIsCancelled
+        ? null
+        : savedInterview.interview_format,
+      client_interview_location: savedIsCancelled
+        ? null
+        : savedInterview.location,
+      client_interview_notes: savedIsCancelled
+        ? null
+        : savedInterview.instructions,
+      client_interview_feedback: savedInterview.feedback,
+      client_interview_outcome: savedInterview.outcome,
+    })
+
+    setClientInterviewSaved(!savedIsCancelled)
+    setClientInterviewCancelled(savedIsCancelled)
+
+    setTimeout(() => {
+      setClientInterviewSaved(false)
+      setClientInterviewCancelled(false)
+    }, 2000)
+  } catch (error: any) {
+    alert(error?.message || 'Could not save client interview.')
+  } finally {
     setSavingClientInterview(false)
   }
+}
+
+async function cancelClientInterview() {
+  if (!clientInterviewForm.id) {
+    alert('Save the client interview before cancelling it.')
+    return
+  }
+
+  const confirmed = window.confirm(
+    'Cancel this client interview? It will remain in the interview history as Cancelled and will not count for reporting.',
+  )
+
+  if (!confirmed) return
+
+  setCancellingClientInterview(true)
+  setClientInterviewSaved(false)
+
+  try {
+    const cancelledFeedback = [
+      clientInterviewForm.feedback.trim(),
+      `Cancelled on ${new Date().toLocaleDateString('en-GB')}.`,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+
+    const payload = buildClientInterviewPayload({
+      feedback: cancelledFeedback,
+      outcome: CLIENT_INTERVIEW_CANCELLED_OUTCOME,
+      counts_for_interview_to_fill: false,
+    })
+
+    const res = await fetch('/api/crm/application-interviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    const json = await res.json().catch(() => null)
+
+    if (!res.ok || !json?.data) {
+      throw new Error(json?.error || 'Could not cancel client interview.')
+    }
+
+    const cancelledInterview = json.data as ApplicationInterview
+
+    setInterviews(current => {
+      const exists = current.some(item => item.id === cancelledInterview.id)
+
+      if (exists) {
+        return current.map(item =>
+          item.id === cancelledInterview.id ? cancelledInterview : item,
+        )
+      }
+
+      return [cancelledInterview, ...current]
+    })
+
+    setClientInterviewForm(clientInterviewToForm(null))
+
+    await patchApp({
+      status: PROTECTED_APPLICATION_STATUSES.includes(app.status)
+        ? app.status
+        : 'submitted',
+      client_interview_date: null,
+      client_interview_time: null,
+      client_interview_format: null,
+      client_interview_location: null,
+      client_interview_notes: null,
+      client_interview_feedback: cancelledFeedback || null,
+      client_interview_outcome: CLIENT_INTERVIEW_CANCELLED_OUTCOME,
+    })
+
+    if (c?.id) {
+      const activityContent = [
+        'Client interview cancelled.',
+        cancelledInterview.stage_number
+          ? `Stage: ${stageNumberLabel(cancelledInterview.stage_number)}`
+          : null,
+        cancelledInterview.interview_date
+          ? `Date: ${formatDisplayDate(cancelledInterview.interview_date)}`
+          : null,
+        cancelledInterview.interview_time
+          ? `Time: ${cancelledInterview.interview_time}`
+          : null,
+        v?.title ? `Vacancy: ${v.title}` : null,
+        client?.company_name ? `Client: ${client.company_name}` : null,
+        'Outcome recorded as: Cancelled',
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      const { data: activityData, error: activityError } = await supabase
+        .from('candidate_activities')
+        .insert({
+          candidate_id: c.id,
+          activity_type: 'note',
+          content: activityContent,
+        })
+        .select()
+        .single()
+
+      if (activityError) {
+        console.error('Could not record cancelled interview activity:', activityError)
+      }
+
+      if (activityData) {
+        setActivityItems(current => [activityData, ...current])
+      }
+    }
+
+    setClientInterviewCancelled(true)
+    setTimeout(() => setClientInterviewCancelled(false), 2500)
+  } catch (error: any) {
+    alert(error?.message || 'Could not cancel client interview.')
+  } finally {
+    setCancellingClientInterview(false)
+  }
+}
 
   async function handleApplicationStatusChange(nextStatus: string) {
     if (nextStatus === 'submitted') {
@@ -2938,8 +3135,11 @@ Kind regards,`
   selectedEmployerContacts={selectedEmployerContacts}
   generateClientInterviewEmail={generateClientInterviewEmail}
   saveClientInterview={saveClientInterview}
+  cancelClientInterview={cancelClientInterview}
   savingClientInterview={savingClientInterview}
+  cancellingClientInterview={cancellingClientInterview}
   clientInterviewSaved={clientInterviewSaved}
+  clientInterviewCancelled={clientInterviewCancelled}
   copyClientEmail={copyClientEmail}
   clientEmailCopied={clientEmailCopied}
   interviews={interviews}
@@ -5874,10 +6074,13 @@ function ClientInterviewPanel({
   setClientInterviewForm,
   clientContacts,
   selectedEmployerContacts,
-  generateClientInterviewEmail,
+    generateClientInterviewEmail,
   saveClientInterview,
+  cancelClientInterview,
   savingClientInterview,
+  cancellingClientInterview,
   clientInterviewSaved,
+  clientInterviewCancelled,
   copyClientEmail,
   clientEmailCopied,
   interviews,
@@ -5893,10 +6096,13 @@ function ClientInterviewPanel({
   setClientInterviewForm: Dispatch<SetStateAction<ClientInterviewForm>>
   clientContacts: ClientContact[]
   selectedEmployerContacts: ClientContact[]
-  generateClientInterviewEmail: () => void
+    generateClientInterviewEmail: () => void
   saveClientInterview: () => Promise<void>
+  cancelClientInterview: () => Promise<void>
   savingClientInterview: boolean
+  cancellingClientInterview: boolean
   clientInterviewSaved: boolean
+  clientInterviewCancelled: boolean
   copyClientEmail: () => Promise<void>
   clientEmailCopied: boolean
   interviews: ApplicationInterview[]
@@ -6261,20 +6467,46 @@ function ClientInterviewPanel({
               </select>
             </div>
 
-            <button
-              className="crm-btn-primary"
-              style={{ width: '100%' }}
-              onClick={saveClientInterview}
-              disabled={savingClientInterview}
-            >
-              {savingClientInterview ? 'Saving...' : 'Save client interview'}
-            </button>
+            <div style={{ display: 'grid', gap: 8 }}>
+  <button
+    className="crm-btn-primary"
+    style={{ width: '100%' }}
+    onClick={saveClientInterview}
+    disabled={savingClientInterview || cancellingClientInterview}
+  >
+    {savingClientInterview ? 'Saving...' : 'Save client interview'}
+  </button>
 
-            {clientInterviewSaved && (
-              <p style={{ fontSize: 12, color: '#217822', fontWeight: 800 }}>
-                ✓ Client interview saved
-              </p>
-            )}
+  {clientInterviewForm.id && !isClientInterviewCancelled(clientInterviewForm) && (
+    <button
+      type="button"
+      className="crm-btn-ghost"
+      style={{
+        width: '100%',
+        borderColor: '#fecaca',
+        background: '#fef2f2',
+        color: '#b91c1c',
+        fontWeight: 900,
+      }}
+      onClick={cancelClientInterview}
+      disabled={savingClientInterview || cancellingClientInterview}
+    >
+      {cancellingClientInterview ? 'Cancelling...' : 'Cancel interview'}
+    </button>
+  )}
+</div>
+
+{clientInterviewSaved && (
+  <p style={{ fontSize: 12, color: '#217822', fontWeight: 800 }}>
+    ✓ Client interview saved
+  </p>
+)}
+
+{clientInterviewCancelled && (
+  <p style={{ fontSize: 12, color: '#b91c1c', fontWeight: 800 }}>
+    ✓ Client interview cancelled and recorded in history
+  </p>
+)}
           </div>
         </div>
 
@@ -6286,44 +6518,65 @@ function ClientInterviewPanel({
           {interviews.filter(item => item.interview_type === 'client').length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {interviews
-                .filter(item => item.interview_type === 'client')
-                .map(item => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: 10,
-                      borderRadius: 10,
-                      background: 'var(--light-bg)',
-                      border: '1px solid var(--border-light)',
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 800,
-                        color: 'var(--text-dark)',
-                      }}
-                    >
-                      {item.stage_number
-                        ? stageNumberLabel(item.stage_number)
-                        : 'Client interview'}
-                    </p>
+  .filter(item => item.interview_type === 'client')
+  .map(item => {
+    const cancelled = isClientInterviewCancelled(item)
 
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                        marginTop: 3,
-                      }}
-                    >
-                      {formatDisplayDate(item.interview_date)}{' '}
-                      {item.interview_time || ''}
-                      {item.counts_for_interview_to_fill
-                        ? ' · Counts for reporting'
-                        : ''}
-                    </p>
-                  </div>
-                ))}
+    return (
+      <div
+        key={item.id}
+        style={{
+          padding: 10,
+          borderRadius: 10,
+          background: cancelled ? '#fef2f2' : 'var(--light-bg)',
+          border: cancelled
+            ? '1px solid #fecaca'
+            : '1px solid var(--border-light)',
+        }}
+      >
+        <p
+          style={{
+            fontSize: 13,
+            fontWeight: 800,
+            color: cancelled ? '#b91c1c' : 'var(--text-dark)',
+          }}
+        >
+          {item.stage_number
+            ? stageNumberLabel(item.stage_number)
+            : 'Client interview'}
+        </p>
+
+        <p
+          style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            marginTop: 3,
+          }}
+        >
+          {formatDisplayDate(item.interview_date)}{' '}
+          {item.interview_time || ''}
+          {item.counts_for_interview_to_fill
+            ? ' · Counts for reporting'
+            : cancelled
+              ? ' · Does not count for reporting'
+              : ''}
+        </p>
+
+        {item.outcome && (
+          <p
+            style={{
+              fontSize: 12,
+              color: cancelled ? '#b91c1c' : 'var(--text-dark)',
+              fontWeight: 800,
+              marginTop: 5,
+            }}
+          >
+            Outcome: {item.outcome}
+          </p>
+        )}
+      </div>
+    )
+  })}
             </div>
           ) : (
             <p className="crm-empty">No client interviews saved yet.</p>
