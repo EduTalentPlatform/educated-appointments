@@ -701,6 +701,7 @@ const [matchKeywordQuery, setMatchKeywordQuery] = useState('')
 const [linkedinKeywords, setLinkedinKeywords] = useState('')
 const [linkedinLocation, setLinkedinLocation] = useState('')
 const [linkedinRadius, setLinkedinRadius] = useState(30)
+const [customLinkedinSearchQuery, setCustomLinkedinSearchQuery] = useState('')
 const [nearbyAreas, setNearbyAreas] = useState<string[]>([])
 const [loadingAreas, setLoadingAreas] = useState(false)
 
@@ -1432,9 +1433,13 @@ function buildLinkedinSearchQuery() {
     .trim()
 }
 
+function getLinkedinSearchQueryForUrl() {
+  return cleanSearchInput(customLinkedinSearchQuery) || buildLinkedinSearchQuery()
+}
+
 function buildLinkedinUrl() {
   return `https://www.google.com/search?q=${encodeURIComponent(
-    buildLinkedinSearchQuery(),
+    getLinkedinSearchQueryForUrl(),
   )}`
 }
 
@@ -1506,7 +1511,7 @@ async function generateLinkedinOutreachMessage() {
     body: JSON.stringify({
       message_type: linkedinOutreachType,
       extra_context: linkedinOutreachContext.trim(),
-      linkedin_search_query: buildLinkedinSearchQuery(),
+      linkedin_search_query: getLinkedinSearchQueryForUrl(),
       vacancy: {
         id: vacancy.id,
         title: vacancy.title,
@@ -3793,24 +3798,54 @@ const filteredCandidateOptions = useMemo(() => {
               </p>
             )}
 
-            <div
-              style={{
-                background: 'var(--light-bg)',
-                borderRadius: 8,
-                padding: '10px 12px',
-                marginBottom: 12,
-                fontFamily: 'monospace',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                lineHeight: 1.5,
-                wordBreak: 'break-all',
-              }}
-            >
-              {buildLinkedinUrl().replace(
-                'https://www.google.com/search?q=',
-                'google.com → ',
-              )}
-            </div>
+            <div className="crm-field" style={{ marginBottom: 12 }}>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 6,
+    }}
+  >
+    <label className="crm-label">Google search query</label>
+
+    {customLinkedinSearchQuery && (
+      <button
+        type="button"
+        className="crm-btn-ghost crm-btn-sm"
+        onClick={() => setCustomLinkedinSearchQuery('')}
+      >
+        Reset to auto
+      </button>
+    )}
+  </div>
+
+  <textarea
+    className="crm-input"
+    rows={4}
+    value={customLinkedinSearchQuery || buildLinkedinSearchQuery()}
+    onChange={e => setCustomLinkedinSearchQuery(e.target.value)}
+    style={{
+      fontFamily: 'monospace',
+      fontSize: 12,
+      lineHeight: 1.5,
+      resize: 'vertical',
+    }}
+  />
+
+  <p
+    style={{
+      fontSize: 11,
+      color: 'var(--text-muted)',
+      marginTop: 5,
+      lineHeight: 1.4,
+    }}
+  >
+    Edit this directly if needed. The Google button will search using exactly
+    what is in this box.
+  </p>
+</div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <a
