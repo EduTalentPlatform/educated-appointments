@@ -242,8 +242,8 @@ export default function LeadDetail({
   const [sites, setSites] = useState(initialSites)
 
   const [activeTab, setActiveTab] = useState<
-    'activity' | 'tasks' | 'vacancies' | 'record'
-  >('activity')
+  'activity' | 'tasks' | 'vacancies' | 'research' | 'record'
+>('activity')
 
   // Activity state
   const [actType, setActType] = useState('call')
@@ -334,15 +334,20 @@ const [savingContactEdit, setSavingContactEdit] = useState(false)
   const [taskDue, setTaskDue] = useState('')
 
   // AI state
-  const [aiMode, setAiMode] = useState<'activity' | 'search'>('activity')
+  const [aiMode, setAiMode] = useState<'activity' | 'search' | 'research'>(
+  'activity',
+)
   const [aiDraftType, setAiDraftType] = useState<
   'email' | 'linkedin' | 'sms' | 'call' | 'follow_up' | 'note'
 >('email')
   const [aiContext, setAiContext] = useState('')
-  const [aiTone, setAiTone] = useState('professional')
-  const [aiResult, setAiResult] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
+const [aiTone, setAiTone] = useState('professional')
+const [aiResult, setAiResult] = useState('')
+const [aiLoading, setAiLoading] = useState(false)
+const [copied, setCopied] = useState(false)
+
+const [researchContactId, setResearchContactId] = useState('')
+const [researchContext, setResearchContext] = useState('')
 
   // Edit lead state
   const [editingLead, setEditingLead] = useState(false)
@@ -356,6 +361,11 @@ const [savingContactEdit, setSavingContactEdit] = useState(false)
     task => task.due_date && task.due_date < today,
   )
   const primaryContact = contacts.find(contact => contact.is_primary) ?? contacts[0]
+
+  const selectedResearchContact =
+  contacts.find(contact => contact.id === researchContactId) ??
+  primaryContact ??
+  null
 
 const leadLevelContact =
   lead.contact_name || lead.contact_title || lead.email || lead.phone || lead.linkedin
@@ -1205,6 +1215,68 @@ async function saveEditedContact(e: FormEvent) {
   setAiLoading(false)
 }
 
+async function runResearch() {
+  setAiMode('research')
+  setAiLoading(true)
+  setAiResult('')
+
+  try {
+    const res = await fetch('/api/crm/leads/research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead: {
+          id: lead.id,
+          company_name: lead.company_name,
+          sector: lead.sector,
+          region: lead.region,
+          website: lead.website,
+          linkedin_company: lead.linkedin_company,
+          status: lead.status,
+          ukprn: lead.ukprn,
+          ofsted_grade: lead.ofsted_grade,
+          ofsted_date: lead.ofsted_date,
+          esfa_funding: lead.esfa_funding,
+          frameworks: lead.frameworks,
+          main_office_address_line_1: lead.main_office_address_line_1,
+          main_office_address_line_2: lead.main_office_address_line_2,
+          main_office_town_city: lead.main_office_town_city,
+          main_office_county: lead.main_office_county,
+          main_office_postcode: lead.main_office_postcode,
+          notes: lead.notes,
+        },
+        meetingContact: selectedResearchContact
+          ? {
+              name: selectedResearchContact.name,
+              title: selectedResearchContact.title,
+              email: selectedResearchContact.email,
+              phone: selectedResearchContact.phone,
+              linkedin: selectedResearchContact.linkedin,
+              role_type: selectedResearchContact.role_type,
+            }
+          : null,
+        contacts,
+        sites,
+        context: researchContext,
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      setAiResult(data.error || 'Research failed.')
+      return
+    }
+
+    setAiResult(data.result || 'No research result returned.')
+  } catch (error) {
+    console.error(error)
+    setAiResult('Research failed. Please try again.')
+  } finally {
+    setAiLoading(false)
+  }
+}
+
   return (
     <div className="crm-page">
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
@@ -1297,6 +1369,25 @@ async function saveEditedContact(e: FormEvent) {
               {deletingLead ? 'Deleting...' : 'Delete'}
             </button>
           )}
+
+          <button
+  type="button"
+  className="crm-btn-ai"
+  onClick={() => {
+    setActiveTab('research')
+    setTimeout(() => runResearch(), 0)
+  }}
+  disabled={aiLoading}
+  style={{
+    position: 'static',
+    transform: 'none',
+    width: 'auto',
+    minWidth: 140,
+    justifyContent: 'center',
+  }}
+>
+  {aiLoading && aiMode === 'research' ? '✦ Researching...' : '✦ Research'}
+</button>
 
           {lead.status !== 'converted' && !(lead as any).client_id && (
             <button
@@ -2259,11 +2350,12 @@ async function saveEditedContact(e: FormEvent) {
 >
           <div className="crm-tabs">
             {[
-              { id: 'activity', label: 'Activity', badge: activities.length },
-              { id: 'tasks', label: 'Tasks', badge: openTasks.length },
-              { id: 'vacancies', label: '🔍 Vacancy Finder', badge: 0 },
-              { id: 'record', label: '🎙 Record', badge: 0 },
-            ].map(tab => (
+  { id: 'activity', label: 'Activity', badge: activities.length },
+  { id: 'tasks', label: 'Tasks', badge: openTasks.length },
+  { id: 'vacancies', label: '🔍 Vacancy Finder', badge: 0 },
+  { id: 'research', label: '🧠 Research', badge: 0 },
+  { id: 'record', label: '🎙 Record', badge: 0 },
+].map(tab => (
               <button
                 key={tab.id}
                 type="button"
@@ -2915,6 +3007,125 @@ async function saveEditedContact(e: FormEvent) {
               </div>
             </div>
           )}
+
+          {/* RESEARCH TAB */}
+{activeTab === 'research' && (
+  <div className="crm-tab-content">
+    <div className="crm-card">
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 12,
+          alignItems: 'flex-start',
+          marginBottom: 12,
+        }}
+      >
+        <div>
+          <p className="crm-card-title">🧠 Meeting Research</p>
+
+          <p
+            style={{
+              margin: 0,
+              marginTop: 4,
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              lineHeight: 1.5,
+            }}
+          >
+            Research <strong>{lead.company_name}</strong> before a booked
+            meeting. The AI will review the company website, LinkedIn,
+            selected contact, Companies House public pages, review platforms,
+            salaries, DfE data and ways Educated Appointments can support them.
+          </p>
+        </div>
+      </div>
+
+      <div className="crm-form-row">
+        <div className="crm-field">
+          <label className="crm-label">Who are we meeting?</label>
+          <select
+            className="crm-select"
+            value={researchContactId}
+            onChange={event => setResearchContactId(event.target.value)}
+          >
+            <option value="">Use primary contact / no specific contact</option>
+
+            {contacts.map(contact => (
+              <option key={contact.id} value={contact.id}>
+                {contact.name}
+                {contact.title ? ` — ${contact.title}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="crm-field">
+          <label className="crm-label">Meeting context</label>
+          <input
+            className="crm-input"
+            value={researchContext}
+            onChange={event => setResearchContext(event.target.value)}
+            placeholder="e.g. first BD meeting, quality roles, sales hiring, apprenticeship growth..."
+          />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="crm-btn-ai"
+        onClick={runResearch}
+        disabled={aiLoading}
+        style={{
+          position: 'static',
+          transform: 'none',
+          width: 'auto',
+          minWidth: 210,
+          justifyContent: 'center',
+          marginTop: 8,
+        }}
+      >
+        {aiLoading && aiMode === 'research'
+          ? '✦ Researching...'
+          : '✦ Run meeting research'}
+      </button>
+
+      {aiResult && aiMode === 'research' && (
+        <div className="crm-ai-result" style={{ marginTop: 12 }}>
+          <div className="crm-ai-result-header">
+            <p className="crm-ai-result-label">✦ Research result</p>
+
+            <div className="crm-ai-result-actions">
+              <button
+                type="button"
+                className="crm-btn-ghost crm-btn-sm"
+                onClick={copyResult}
+              >
+                {copied ? '✓ Copied' : 'Copy'}
+              </button>
+
+              <button
+                type="button"
+                className="crm-btn-primary crm-btn-sm"
+                onClick={() => {
+                  setActType('note')
+                  setActDirection('internal')
+                  setActContactId(researchContactId || '')
+                  setActContent(`Meeting Research:\n\n${aiResult}`)
+                  setActiveTab('activity')
+                }}
+              >
+                Add to activity
+              </button>
+            </div>
+          </div>
+
+          <pre className="crm-ai-result-text">{aiResult}</pre>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
           {/* RECORD TAB */}
           {activeTab === 'record' && (
