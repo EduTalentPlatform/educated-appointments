@@ -1339,32 +1339,97 @@ setAdding(false)
     setAddingMatchId(null)
   }
 
-  function buildLinkedinSearchQuery() {
-  const role = vacancy.sector || vacancy.title || ''
+  function cleanSearchInput(value?: string | null) {
+  return String(value || '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
-  const skills = vacancy.subject_area
-    ? vacancy.subject_area
-        .split(',')
-        .slice(0, 3)
-        .map((s: string) => s.trim())
-        .filter(Boolean)
-        .join(' OR ')
-    : ''
+function hasBooleanSyntax(value: string) {
+  return /["()]|\b(AND|OR|NOT)\b/i.test(value)
+}
 
-  const loc = linkedinLocation || vacancy.location || vacancy.region || ''
-  const areas =
-    nearbyAreas.length > 0
-      ? nearbyAreas.slice(0, 5).filter(Boolean)
-      : [loc].filter(Boolean)
+function quoteGoogleTerm(value: string) {
+  const cleaned = cleanSearchInput(value).replace(/^"+|"+$/g, '')
 
-  const roleTerms = linkedinKeywords || role
+  if (!cleaned) return ''
 
-  const locationTerms = areas.map(area => `"${area}"`).join(' OR ')
-  const skillTerms = skills ? ` "${skills.replace(/ OR /g, '" OR "')}"` : ''
+  if (!/\s/.test(cleaned)) return cleaned
 
-  return `site:linkedin.com/in ${
-    roleTerms ? `"${roleTerms}"` : ''
-  }${skillTerms}${locationTerms ? ` (${locationTerms})` : ''}`.trim()
+  return `"${cleaned.replace(/"/g, '')}"`
+}
+
+function buildGoogleGroup(value?: string | null) {
+  const cleaned = cleanSearchInput(value)
+
+  if (!cleaned) return ''
+
+  if (hasBooleanSyntax(cleaned)) {
+    return cleaned
+  }
+
+  const parts = cleaned
+    .split(/[,;\n]/)
+    .map(part => cleanSearchInput(part))
+    .filter(Boolean)
+
+  if (parts.length > 1) {
+    return `(${parts.map(quoteGoogleTerm).join(' OR ')})`
+  }
+
+  return quoteGoogleTerm(cleaned)
+}
+
+function buildLinkedinSearchQuery() {
+  const fallbackRole = vacancy.sector || vacancy.title || ''
+  const roleTerms = buildGoogleGroup(linkedinKeywords || fallbackRole)
+
+  const subjectTerms = buildGoogleGroup(
+    vacancy.subject_area
+      ? vacancy.subject_area
+          .split(',')
+          .map((item: string) => item.trim())
+          .filter(Boolean)
+          .join(',')
+      : '',
+  )
+
+  const primaryLocation =
+    linkedinLocation || vacancy.location || vacancy.region || ''
+
+  const locationAreas = [
+    primaryLocation,
+    ...nearbyAreas,
+  ]
+    .map(area => cleanSearchInput(area))
+    .filter(Boolean)
+
+  const uniqueLocationAreas = Array.from(new Set(locationAreas))
+
+  const locationTerms =
+    uniqueLocationAreas.length > 0
+      ? `(${uniqueLocationAreas.map(quoteGoogleTerm).join(' OR ')})`
+      : ''
+
+  return [
+    '(site:linkedin.com/in OR site:uk.linkedin.com/in)',
+    roleTerms,
+    subjectTerms && subjectTerms !== roleTerms ? subjectTerms : '',
+    locationTerms,
+    '-inurl:/jobs/',
+    '-inurl:/company/',
+    '-inurl:/school/',
+    '-intitle:jobs',
+    '-recruitment',
+    '-recruiter',
+    '-vacancy',
+    '-vacancies',
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
 }
 
 function buildLinkedinUrl() {
@@ -1374,38 +1439,51 @@ function buildLinkedinUrl() {
 }
 
   async function loadNearbyAreas() {
-    if (!vacancy.postcode && !vacancy.lat) return
+  const postcodeToUse = vacancy.postcode || briefing.postcode || ''
 
-    setLoadingAreas(true)
-
-    try {
-      const postcode = vacancy.postcode || ''
-      const clean = postcode.replace(/\s/g, '').toUpperCase()
-
-      if (clean) {
-        const res = await fetch(
-          `https://api.postcodes.io/postcodes/${clean}/nearest?limit=10&radius=${
-            linkedinRadius * 1609
-          }`,
-        )
-
-        if (res.ok) {
-          const data = await res.json()
-          const areas = [
-            ...new Set(
-              (data.result ?? [])
-                .map((postcodeResult: any) => postcodeResult.admin_district)
-                .filter(Boolean),
-            ),
-          ] as string[]
-
-          setNearbyAreas(areas.slice(0, 6))
-        }
-      }
-    } catch {}
-
-    setLoadingAreas(false)
+  if (!postcodeToUse.trim()) {
+    alert('Add a vacancy postcode in the Briefing tab first. Google cannot calculate a real radius from a town name alone.')
+    return
   }
+
+  setLoadingAreas(true)
+
+  try {
+    const clean = postcodeToUse.replace(/\s/g, '').toUpperCase()
+
+    const res = await fetch(
+      `https://api.postcodes.io/postcodes/${clean}/nearest?limit=20&radius=${
+        linkedinRadius * 1609
+      }`,
+    )
+
+    if (!res.ok) {
+      setLoadingAreas(false)
+      return
+    }
+
+    const data = await res.json()
+
+    const areas = [
+      vacancy.location,
+      vacancy.region,
+      linkedinLocation,
+      ...(data.result ?? []).flatMap((postcodeResult: any) => [
+        postcodeResult.admin_district,
+        postcodeResult.parish,
+        postcodeResult.region,
+      ]),
+    ]
+      .map(area => cleanSearchInput(area))
+      .filter(Boolean)
+
+    setNearbyAreas(Array.from(new Set(areas)).slice(0, 10))
+  } catch (error) {
+    console.error('Nearby area lookup failed:', error)
+  }
+
+  setLoadingAreas(false)
+}
 
   const standardSubjects = Array.from(
   new Set(
@@ -3660,7 +3738,7 @@ const filteredCandidateOptions = useMemo(() => {
               <button
                 className="crm-btn-ghost crm-btn-sm"
                 onClick={loadNearbyAreas}
-                disabled={loadingAreas || (!vacancy.postcode && !vacancy.lat)}
+                disabled={loadingAreas || (!vacancy.postcode && !briefing.postcode)}
               >
                 {loadingAreas ? 'Loading...' : '📍 Load nearby areas'}
               </button>
@@ -3701,7 +3779,7 @@ const filteredCandidateOptions = useMemo(() => {
               </div>
             )}
 
-            {!vacancy.postcode && !vacancy.lat && (
+            {!vacancy.postcode && !briefing.postcode && (
               <p
                 style={{
                   fontSize: 12,
